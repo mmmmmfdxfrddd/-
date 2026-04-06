@@ -1,0 +1,148 @@
+-- =============================================
+--  【禁用攻击判定，保留物理碰撞】修复拖拽偏移
+-- =============================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local lp = Players.LocalPlayer
+
+local godEnabled = false
+local originalStates = {}
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = lp:WaitForChild("PlayerGui")
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0, 120, 0, 50)
+ToggleBtn.Position = UDim2.new(0, 20, 0, 20)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ToggleBtn.Text = "godmode:false"
+ToggleBtn.TextColor3 = Color3.new(1, 1, 1)
+ToggleBtn.TextSize = 14
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 12)
+UICorner.Parent = ToggleBtn
+
+-- 拖拽相关变量
+local dragging = false
+local dragStart = nil
+local startPos = nil
+local dragThreshold = 10  -- 移动超过10像素才算拖拽
+
+-- 点击/拖拽判断
+local isDragging = false
+local dragStartPos = nil
+
+ToggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragStartPos = input.Position
+        isDragging = false
+    end
+end)
+
+ToggleBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if dragStartPos and not isDragging then
+            local delta = (input.Position - dragStartPos).Magnitude
+            if delta > dragThreshold then
+                isDragging = true
+                -- 开始拖拽
+                dragging = true
+                dragStart = input.Position
+                startPos = ToggleBtn.Position
+            end
+        end
+    end
+end)
+
+ToggleBtn.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        -- 如果没有拖拽，则视为点击
+        if not isDragging then
+            -- 切换免伤模式
+            godEnabled = not godEnabled
+            
+            if godEnabled then
+                ToggleBtn.Text = "godmode:true"
+                ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+            else
+                ToggleBtn.Text = "godmode:false"
+                ToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            end
+        end
+        
+        -- 重置拖拽状态
+        dragging = false
+        isDragging = false
+        dragStartPos = nil
+    end
+end)
+
+-- 拖拽移动
+RunService.RenderStepped:Connect(function()
+    if dragging and dragStart and startPos then
+        local mouse = lp:GetMouse()
+        local delta = mouse.X - dragStart.X
+        local deltaY = mouse.Y - dragStart.Y
+        ToggleBtn.Position = UDim2.new(0, startPos.X.Offset + delta, 0, startPos.Y.Offset + deltaY)
+    end
+end)
+
+-- 核心：禁用攻击判定，保留物理碰撞
+local function ApplyNoDamageMode(char)
+    if not godEnabled or not char then return end
+
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") or part:IsA("MeshPart") then
+            -- 记录原始状态
+            if not originalStates[part] then
+                originalStates[part] = {
+                    CanTouch = part.CanTouch,
+                    CanQuery = part.CanQuery
+                }
+            end
+            
+            -- 保留 CanCollide（物理碰撞正常）
+            -- 只禁用 Touched 事件和射线查询
+            part.CanTouch = false   -- 禁用触碰事件（伤害检测常用）
+            part.CanQuery = false   -- 禁用射线/区域查询（子弹、技能锁定）
+        end
+    end
+end
+
+-- 恢复原始状态
+local function RestoreStates(char)
+    if not char then return end
+    for part, state in pairs(originalStates) do
+        if part and part.Parent then
+            part.CanTouch = state.CanTouch
+            part.CanQuery = state.CanQuery
+        end
+    end
+end
+
+-- 每帧强制执行
+RunService.Heartbeat:Connect(function()
+    local char = lp.Character
+    if char then
+        ApplyNoDamageMode(char)
+    end
+end)
+
+-- 死亡复活后重置
+lp.CharacterAdded:Connect(function(char)
+    char:WaitForChild("HumanoidRootPart")
+    task.wait(0.3)
+    originalStates = {}
+    if godEnabled then
+        ApplyNoDamageMode(char)
+    end
+end)
+
+print("✅ 免伤模式已加载 - 攻击无法命中你，但移动碰撞正常")
+print("📌 拖动按钮：按住并移动超过10像素")
+print("📌 点击按钮：轻触即可切换模式，不会偏移")
