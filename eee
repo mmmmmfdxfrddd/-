@@ -1,0 +1,469 @@
+-- ========= SUR脚本 =========
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+
+repeat task.wait() until LocalPlayer.Character
+
+-- 方案1 的 UI 和逻辑
+local function loadPlan1()
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "AutoRerollGUI"
+    gui.ResetOnSpawn = false
+    gui.Parent = LocalPlayer.PlayerGui
+
+    local title = Instance.new("Frame")
+    title.Size = UDim2.new(0, 350, 0, 40)
+    title.Position = UDim2.new(0.5, -175, 0.1, 0)
+    title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    title.Parent = gui
+
+    local titleText = Instance.new("TextLabel")
+    titleText.Size = UDim2.new(0, 150, 1, 0)
+    titleText.Position = UDim2.new(0, 10, 0, 0)
+    titleText.BackgroundTransparency = 1
+    titleText.Text = "自动洗属性"
+    titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleText.TextSize = 20
+    titleText.TextXAlignment = Enum.TextXAlignment.Left
+    titleText.Parent = title
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 40, 0, 30)
+    closeBtn.Position = UDim2.new(1, -45, 0.5, -15)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeBtn.Parent = title
+
+    local toggleUIBtn = Instance.new("TextButton")
+    toggleUIBtn.Size = UDim2.new(0, 35, 0, 35)
+    toggleUIBtn.Position = UDim2.new(1, -85, 0.05, 0)
+    toggleUIBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    toggleUIBtn.Text = "▼"
+    toggleUIBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleUIBtn.TextSize = 18
+    toggleUIBtn.Parent = gui
+
+    local panel = Instance.new("Frame")
+    panel.Size = UDim2.new(0, 350, 0, 210)
+    panel.Position = UDim2.new(0.5, -175, 0.1, 40)
+    panel.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    panel.Parent = gui
+
+    local toggleBtn1 = Instance.new("TextButton")
+    toggleBtn1.Size = UDim2.new(0, 100, 0, 35)
+    toggleBtn1.Position = UDim2.new(0.5, -155, 0, 10)
+    toggleBtn1.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+    toggleBtn1.Text = "充能箭 OFF"
+    toggleBtn1.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn1.TextSize = 12
+    toggleBtn1.Parent = panel
+
+    local toggleBtn2 = Instance.new("TextButton")
+    toggleBtn2.Size = UDim2.new(0, 100, 0, 35)
+    toggleBtn2.Position = UDim2.new(0.5, 55, 0, 10)
+    toggleBtn2.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+    toggleBtn2.Text = "普通箭 OFF"
+    toggleBtn2.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn2.TextSize = 12
+    toggleBtn2.Parent = panel
+
+    local adminBtn = Instance.new("TextButton")
+    adminBtn.Size = UDim2.new(0, 330, 0, 35)
+    adminBtn.Position = UDim2.new(0.5, -165, 0, 55)
+    adminBtn.BackgroundColor3 = Color3.fromRGB(150, 100, 0)
+    adminBtn.Text = "触发 NPC"
+    adminBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    adminBtn.TextSize = 14
+    adminBtn.Parent = panel
+
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(0, 330, 0, 50)
+    statusLabel.Position = UDim2.new(0.5, -165, 0, 100)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Text = "状态：空闲"
+    statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    statusLabel.TextSize = 13
+    statusLabel.TextWrapped = true
+    statusLabel.Parent = panel
+
+    -- 黑名单
+    local commonBlacklist = {
+        "Powerful", "Manic", "Tough", "Enrage",
+        "Sloppy", "Tragic", "Strong", "Lethargic", "None", "Godly", "Daemon"
+    }
+
+    -- 充能箭目标
+    local chargedSpecialStand = "DTW"
+
+    local currentLoop = nil
+    local uiVisible = true
+    local isRunning = false
+    local currentMode = nil
+
+    local function updateStatus(text, isError)
+        statusLabel.Text = "状态：" .. text
+        if isError then
+            statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        else
+            statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+    end
+
+    -- 使用道具（箭）
+    local function useItem(itemName)
+        local char = LocalPlayer.Character
+        if not char then return false end
+        
+        local tool = char:FindFirstChild(itemName)
+        if not tool then
+            local bp = LocalPlayer:FindFirstChild("Backpack")
+            if bp then tool = bp:FindFirstChild(itemName) end
+        end
+        if not tool then
+            updateStatus("未找到 " .. itemName, true)
+            return false
+        end
+        
+        local hum = char:FindFirstChild("Humanoid")
+        if hum then hum:EquipTool(tool) end
+        task.wait(0.1)
+        
+        local useEvent = tool:FindFirstChild("Use")
+        if useEvent then
+            useEvent:FireServer()
+            return true
+        end
+        
+        updateStatus("未找到 " .. itemName .. " 的 Use 事件", true)
+        return false
+    end
+
+    -- 使用Rokakaka（带参数）
+    local function useRokakaka()
+        local char = LocalPlayer.Character
+        if not char then return false end
+        
+        local tool = char:FindFirstChild("Rokakaka")
+        if not tool then
+            local bp = LocalPlayer:FindFirstChild("Backpack")
+            if bp then tool = bp:FindFirstChild("Rokakaka") end
+        end
+        if not tool then
+            updateStatus("未找到 Rokakaka", true)
+            return false
+        end
+        
+        local hum = char:FindFirstChild("Humanoid")
+        if hum then hum:EquipTool(tool) end
+        task.wait(0.1)
+        
+        local useEvent = tool:FindFirstChild("Use")
+        if useEvent then
+            local args = {"ROKA_CONFIRM_ACCEPTED"}
+            useEvent:FireServer(unpack(args))
+            return true
+        end
+        
+        updateStatus("未找到 Rokakaka 的 Use 事件", true)
+        return false
+    end
+
+    local function getCurrentAttribute()
+        local attri = LocalPlayer.Data:FindFirstChild("Attri")
+        if attri then
+            return attri.Value
+        end
+        return nil
+    end
+
+    local function getCurrentStand()
+        local stand = LocalPlayer.Data:FindFirstChild("Stand")
+        if stand then
+            return stand.Value
+        end
+        return nil
+    end
+
+    local function checkBlacklist(attriValue)
+        for _, word in pairs(commonBlacklist) do
+            if attriValue and string.find(attriValue, word) then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function isDTW(standValue)
+        return standValue == chargedSpecialStand
+    end
+
+    local function getEmptySlot()
+        local data = LocalPlayer:FindFirstChild("Data")
+        if not data then return nil, false end
+        
+        local slots = {
+            {value = data:FindFirstChild("Slot1Stand"), slot = "Slot1"},
+            {value = data:FindFirstChild("Slot2Stand"), slot = "Slot2"},
+            {value = data:FindFirstChild("Slot4Stand"), slot = "Slot4"}
+        }
+        
+        for _, slotInfo in pairs(slots) do
+            if slotInfo.value and slotInfo.value.Value == "None" then
+                return slotInfo.slot, true
+            end
+        end
+        
+        return nil, false
+    end
+
+    local function equipToEmptySlot()
+        local slot, hasEmpty = getEmptySlot()
+        if not hasEmpty then
+            return false
+        end
+        
+        local args = {slot}
+        local switchEvent = game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("SwitchStand")
+        switchEvent:FireServer(unpack(args))
+        updateStatus("已装备到 " .. slot, false)
+        task.wait(0.5)
+        return true
+    end
+
+    local function onCharacterAdded()
+        task.wait(2)
+        if isRunning then
+            startLoop()
+        end
+    end
+
+    LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+
+    local function startLoop()
+        if currentLoop then 
+            task.cancel(currentLoop) 
+            currentLoop = nil 
+        end
+        
+        local arrowName = (currentMode == "charged") and "Charged Arrow" or "Stand Arrow"
+        
+        currentLoop = task.spawn(function()
+            while isRunning do
+                if not LocalPlayer.Character then
+                    updateStatus("等待角色重生...", false)
+                    while not LocalPlayer.Character and isRunning do
+                        task.wait(1)
+                    end
+                    if not isRunning then break end
+                    task.wait(2)
+                end
+                
+                updateStatus("正在使用 " .. arrowName .. "...", false)
+                
+                if not useItem(arrowName) then
+                    updateStatus(arrowName .. " 使用失败", true)
+                    stopAndTurnOff(arrowName .. " 使用失败")
+                    break
+                end
+                
+                for i = 5, 1, -1 do
+                    if not isRunning then break end
+                    updateStatus("等待 " .. i .. " 秒...", false)
+                    task.wait(1)
+                end
+                if not isRunning then break end
+                updateStatus("等待 0.5 秒...", false)
+                task.wait(0.5)
+                
+                updateStatus("检查属性与替身...", false)
+                task.wait(0.5)
+                
+                local currentAttri = getCurrentAttribute()
+                local currentStand = getCurrentStand()
+                updateStatus("当前替身：" .. (currentStand or "未知") .. " | 属性：" .. (currentAttri or "未知"), false)
+                
+                if not currentAttri then
+                    updateStatus("无法读取属性", true)
+                    stopAndTurnOff("无法读取属性")
+                    break
+                end
+                
+                if isDTW(currentStand) then
+                    updateStatus("抽到 DTW，存储", false)
+                    local hasEmpty = getEmptySlot()
+                    if hasEmpty then
+                        equipToEmptySlot()
+                        updateStatus("已存储，3秒后继续抽箭", false)
+                        task.wait(3)
+                    else
+                        stopAndTurnOff("DTW 无空槽位，已停止")
+                        break
+                    end
+                    
+                elseif checkBlacklist(currentAttri) then
+                    updateStatus("属性在黑名单中，使用 rokakaka...", false)
+                    if useRokakaka() then
+                        updateStatus("已使用 rokakaka，继续循环...", false)
+                        task.wait(1)
+                    else
+                        stopAndTurnOff("rokakaka 使用失败，已停止")
+                        break
+                    end
+                else
+                    updateStatus("获得好属性：" .. currentAttri .. "，存储", false)
+                    local hasEmpty = getEmptySlot()
+                    if hasEmpty then
+                        equipToEmptySlot()
+                        updateStatus("已存储，3秒后继续抽箭", false)
+                        task.wait(3)
+                    else
+                        stopAndTurnOff("好属性无空槽位，已停止")
+                        break
+                    end
+                end
+            end
+            
+            if isRunning then
+                isRunning = false
+                if currentMode == "charged" then
+                    toggleBtn1.Text = "充能箭 OFF"
+                    toggleBtn1.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+                else
+                    toggleBtn2.Text = "普通箭 OFF"
+                    toggleBtn2.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+                end
+            end
+            currentLoop = nil
+        end)
+    end
+
+    local function stopAndTurnOff(reason)
+        if currentLoop then 
+            task.cancel(currentLoop) 
+            currentLoop = nil 
+        end
+        isRunning = false
+        if currentMode == "charged" then
+            toggleBtn1.Text = "充能箭 OFF"
+            toggleBtn1.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+        else
+            toggleBtn2.Text = "普通箭 OFF"
+            toggleBtn2.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+        end
+        updateStatus(reason, false)
+    end
+
+    -- 充能箭开关
+    toggleBtn1.MouseButton1Click:Connect(function()
+        if isRunning then
+            isRunning = false
+            if currentLoop then 
+                task.cancel(currentLoop) 
+                currentLoop = nil 
+            end
+            toggleBtn1.Text = "充能箭 OFF"
+            toggleBtn1.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+            if currentMode == "charged" then
+                currentMode = nil
+            end
+            updateStatus("充能箭已停止", false)
+        else
+            if currentMode == "normal" and toggleBtn2.Text == "普通箭 ON" then
+                toggleBtn2.Text = "普通箭 OFF"
+                toggleBtn2.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+            end
+            currentMode = "charged"
+            isRunning = true
+            toggleBtn1.Text = "充能箭 ON"
+            toggleBtn1.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+            startLoop()
+        end
+    end)
+
+    -- 普通箭开关
+    toggleBtn2.MouseButton1Click:Connect(function()
+        if isRunning and currentMode == "normal" then
+            isRunning = false
+            if currentLoop then 
+                task.cancel(currentLoop) 
+                currentLoop = nil 
+            end
+            toggleBtn2.Text = "普通箭 OFF"
+            toggleBtn2.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+            currentMode = nil
+            updateStatus("普通箭已停止", false)
+        else
+            if currentMode == "charged" and toggleBtn1.Text == "充能箭 ON" then
+                toggleBtn1.Text = "充能箭 OFF"
+                toggleBtn1.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+            end
+            currentMode = "normal"
+            isRunning = true
+            toggleBtn2.Text = "普通箭 ON"
+            toggleBtn2.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+            startLoop()
+        end
+    end)
+
+    -- NPC触发按钮
+    adminBtn.MouseButton1Click:Connect(function()
+        local success, err = pcall(function()
+            local npc = workspace:WaitForChild("Map"):WaitForChild("NPCs"):WaitForChild("cymekal101")
+            local done = npc:WaitForChild("Done")
+            done:FireServer()
+        end)
+        if success then
+            updateStatus("已触发 cymekal101.Done", false)
+        else
+            updateStatus("触发失败: " .. tostring(err), true)
+        end
+    end)
+
+    toggleUIBtn.MouseButton1Click:Connect(function()
+        uiVisible = not uiVisible
+        title.Visible = uiVisible
+        panel.Visible = uiVisible
+        if uiVisible then
+            toggleUIBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+            toggleUIBtn.Text = "▼"
+        else
+            toggleUIBtn.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+            toggleUIBtn.Text = "▲"
+        end
+    end)
+
+    closeBtn.MouseButton1Click:Connect(function()
+        if currentLoop then task.cancel(currentLoop) end
+        gui:Destroy()
+    end)
+
+    local drag = false
+    local startPos, startMouse
+    title.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            drag = true
+            startPos = title.Position
+            startMouse = input.Position
+        end
+    end)
+    title.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            drag = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if drag and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            local delta = input.Position - startMouse
+            local x = math.clamp(startPos.X.Offset + delta.X, 0, gui.AbsoluteSize.X - title.AbsoluteSize.X)
+            local y = math.clamp(startPos.Y.Offset + delta.Y, 0, gui.AbsoluteSize.Y - title.AbsoluteSize.Y)
+            title.Position = UDim2.new(0, x, 0, y)
+            panel.Position = UDim2.new(0, x, 0, y + 40)
+        end
+    end)
+
+    warn("方案1已加载 | 充能箭 + 普通箭双模式")
+end
+
+loadPlan1()
