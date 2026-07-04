@@ -1,0 +1,331 @@
+-- ========== 自动洗属性脚本（修复版） ==========
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local lp = Players.LocalPlayer
+
+local isRunning = false
+
+-- ========== 弹窗函数 ==========
+local function showNotification(title, text, duration)
+    duration = duration or 3
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = duration
+        })
+    end)
+end
+
+-- ========== UI面板 ==========
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoAttributeUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = lp:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 200, 0, 80)
+mainFrame.Position = UDim2.new(0.5, -100, 0.3, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+mainFrame.BackgroundTransparency = 0.05
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.Parent = mainFrame
+
+-- 标题
+local title = Instance.new("Frame")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.Position = UDim2.new(0, 0, 0, 0)
+title.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+title.BackgroundTransparency = 0
+title.BorderSizePixel = 0
+title.Parent = mainFrame
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = title
+
+local titleText = Instance.new("TextLabel")
+titleText.Size = UDim2.new(0.5, 0, 1, 0)
+titleText.Position = UDim2.new(0, 10, 0, 0)
+titleText.BackgroundTransparency = 1
+titleText.Text = "自动洗属性"
+titleText.TextColor3 = Color3.new(1, 1, 1)
+titleText.TextSize = 14
+titleText.Font = Enum.Font.GothamBold
+titleText.TextXAlignment = Enum.TextXAlignment.Left
+titleText.Parent = title
+
+-- 折叠按钮
+local toggleUIBtn = Instance.new("TextButton")
+toggleUIBtn.Size = UDim2.new(0, 26, 0, 26)
+toggleUIBtn.Position = UDim2.new(1, -60, 0.5, -13)
+toggleUIBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+toggleUIBtn.Text = "−"
+toggleUIBtn.TextColor3 = Color3.new(1, 1, 1)
+toggleUIBtn.TextSize = 14
+toggleUIBtn.Font = Enum.Font.GothamBold
+toggleUIBtn.AutoButtonColor = false
+toggleUIBtn.Parent = title
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 5)
+toggleCorner.Parent = toggleUIBtn
+
+-- 删除按钮
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 26, 0, 26)
+closeBtn.Position = UDim2.new(1, -32, 0.5, -13)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.new(1, 1, 1)
+closeBtn.TextSize = 13
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.AutoButtonColor = false
+closeBtn.Parent = title
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 5)
+closeCorner.Parent = closeBtn
+
+-- 内容区域
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, 0, 1, -30)
+content.Position = UDim2.new(0, 0, 0, 30)
+content.BackgroundTransparency = 1
+content.Parent = mainFrame
+
+-- ===== 开关1：普通 =====
+local btn1 = Instance.new("TextButton")
+btn1.Size = UDim2.new(0, 75, 0, 35)
+btn1.Position = UDim2.new(0.08, 0, 0.5, -17.5)
+btn1.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+btn1.Text = "普通"
+btn1.TextColor3 = Color3.new(1, 1, 1)
+btn1.TextSize = 13
+btn1.Font = Enum.Font.GothamBold
+btn1.AutoButtonColor = false
+btn1.Parent = content
+local btn1Corner = Instance.new("UICorner")
+btn1Corner.CornerRadius = UDim.new(0, 6)
+btn1Corner.Parent = btn1
+
+local light1 = Instance.new("Frame")
+light1.Size = UDim2.new(0, 8, 0, 8)
+light1.Position = UDim2.new(1, -12, 0.5, -4)
+light1.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+light1.BorderSizePixel = 0
+light1.Parent = btn1
+local light1Corner = Instance.new("UICorner")
+light1Corner.CornerRadius = UDim.new(0, 4)
+light1Corner.Parent = light1
+
+-- ===== 开关2：蓄能 =====
+local btn2 = Instance.new("TextButton")
+btn2.Size = UDim2.new(0, 75, 0, 35)
+btn2.Position = UDim2.new(0.52, 0, 0.5, -17.5)
+btn2.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+btn2.Text = "蓄能"
+btn2.TextColor3 = Color3.new(1, 1, 1)
+btn2.TextSize = 13
+btn2.Font = Enum.Font.GothamBold
+btn2.AutoButtonColor = false
+btn2.Parent = content
+local btn2Corner = Instance.new("UICorner")
+btn2Corner.CornerRadius = UDim.new(0, 6)
+btn2Corner.Parent = btn2
+
+local light2 = Instance.new("Frame")
+light2.Size = UDim2.new(0, 8, 0, 8)
+light2.Position = UDim2.new(1, -12, 0.5, -4)
+light2.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+light2.BorderSizePixel = 0
+light2.Parent = btn2
+local light2Corner = Instance.new("UICorner")
+light2Corner.CornerRadius = UDim.new(0, 4)
+light2Corner.Parent = light2
+
+-- ========== 核心逻辑 ==========
+local targetAttributes = {
+    "Daemon", "Critical", "Multiply", "Forceful", "Legendary"
+}
+
+local function sendItem(itemName)
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Library")
+        if remotes then
+            remotes = remotes:FindFirstChild("Remotes")
+            if remotes then
+                local send = remotes:FindFirstChild("Send")
+                if send then
+                    local args = {"Item", itemName}
+                    send:FireServer(unpack(args))
+                end
+            end
+        end
+    end)
+end
+
+local function getCurrentAttribute()
+    local data = lp:FindFirstChild("Data")
+    if not data then return nil end
+    local stats = data:FindFirstChild("Stats")
+    if not stats then return nil end
+    local attr = stats:FindFirstChild("Attribute")
+    if attr then
+        return attr.Value
+    end
+    return nil
+end
+
+local function checkAttribute(attr)
+    if not attr then return false end
+    for _, target in ipairs(targetAttributes) do
+        if attr == target then
+            return true
+        end
+    end
+    return false
+end
+
+local function startLoop(itemName, btn, light)
+    if isRunning then
+        showNotification("⚠️ 提示", "另一个开关正在运行", 2)
+        return
+    end
+    
+    isRunning = true
+    local originalText = btn.Text
+    btn.Text = "运行中"
+    btn.BackgroundColor3 = Color3.fromRGB(0, 120, 80)
+    light.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    
+    task.spawn(function()
+        while isRunning do
+            sendItem(itemName)
+            
+            for i = 5, 1, -1 do
+                if not isRunning then break end
+                task.wait(1)
+            end
+            if not isRunning then break end
+            
+            local attr = getCurrentAttribute()
+            print("当前属性:", attr)
+            
+            if attr and checkAttribute(attr) then
+                showNotification("🎯 目标属性", "已获得 " .. attr, 3)
+                isRunning = false
+                btn.Text = originalText
+                btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+                light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+                return
+            end
+            
+            sendItem("Rokakaka")
+            task.wait(1)
+        end
+        
+        btn.Text = originalText
+        btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    end)
+end
+
+local function stopLoop(btn, light)
+    isRunning = false
+    if btn.Text == "运行中" then
+        btn.Text = "普通"
+    end
+    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+end
+
+-- ========== 开关事件 ==========
+btn1.MouseButton1Click:Connect(function()
+    if isRunning then
+        stopLoop(btn1, light1)
+        return
+    end
+    startLoop("Stand Arrow", btn1, light1)
+end)
+
+btn1.TouchTap:Connect(function()
+    if isRunning then
+        stopLoop(btn1, light1)
+        return
+    end
+    startLoop("Stand Arrow", btn1, light1)
+end)
+
+btn2.MouseButton1Click:Connect(function()
+    if isRunning then
+        stopLoop(btn2, light2)
+        return
+    end
+    startLoop("Unusual Arrow", btn2, light2)
+end)
+
+btn2.TouchTap:Connect(function()
+    if isRunning then
+        stopLoop(btn2, light2)
+        return
+    end
+    startLoop("Unusual Arrow", btn2, light2)
+end)
+
+-- ========== 拖拽功能 ==========
+local dragData = {dragging = false, offset = Vector2.new()}
+
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragData.dragging = true
+        dragData.offset = Vector2.new(input.Position.X - mainFrame.AbsolutePosition.X, input.Position.Y - mainFrame.AbsolutePosition.Y)
+        input:Ignore()
+    end
+end)
+
+title.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragData.dragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragData.dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        mainFrame.Position = UDim2.new(0, input.Position.X - dragData.offset.X, 0, input.Position.Y - dragData.offset.Y)
+    end
+end)
+
+-- ========== 折叠功能 ==========
+local isCollapsed = false
+toggleUIBtn.MouseButton1Click:Connect(function()
+    isCollapsed = not isCollapsed
+    content.Visible = not isCollapsed
+    toggleUIBtn.Text = isCollapsed and "+" or "−"
+    mainFrame.Size = isCollapsed and UDim2.new(0, 200, 0, 30) or UDim2.new(0, 200, 0, 80)
+end)
+
+toggleUIBtn.TouchTap:Connect(function()
+    isCollapsed = not isCollapsed
+    content.Visible = not isCollapsed
+    toggleUIBtn.Text = isCollapsed and "+" or "−"
+    mainFrame.Size = isCollapsed and UDim2.new(0, 200, 0, 30) or UDim2.new(0, 200, 0, 80)
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    if isRunning then
+        isRunning = false
+    end
+    screenGui:Destroy()
+end)
+
+closeBtn.TouchTap:Connect(function()
+    if isRunning then
+        isRunning = false
+    end
+    screenGui:Destroy()
+end)
+
+print("✅ 自动洗属性脚本已加载")
