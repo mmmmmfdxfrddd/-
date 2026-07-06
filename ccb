@@ -1,0 +1,915 @@
+-- ========== 多功能整合脚本 ==========
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local lp = Players.LocalPlayer
+
+-- ==================== 公共函数 ====================
+local function showNotification(title, text, duration)
+    duration = duration or 3
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = duration
+        })
+    end)
+end
+
+-- ==================== 物理控制 ====================
+local savedPhysics = {
+    walkSpeed = nil, jumpPower = nil, autoRotate = nil, platformStand = nil,
+    velocity = nil, rotationalVelocity = nil, assemblyLinearVelocity = nil, assemblyAngularVelocity = nil,
+    hipHeight = nil, maxSlopeAngle = nil, useJumpPower = nil, breakJointsOnDeath = nil, sit = nil
+}
+
+local function disablePhysics()
+    local char = lp.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        savedPhysics.walkSpeed = humanoid.WalkSpeed
+        savedPhysics.jumpPower = humanoid.JumpPower
+        savedPhysics.autoRotate = humanoid.AutoRotate
+        savedPhysics.platformStand = humanoid.PlatformStand
+        savedPhysics.hipHeight = humanoid.HipHeight
+        savedPhysics.maxSlopeAngle = humanoid.MaxSlopeAngle
+        savedPhysics.useJumpPower = humanoid.UseJumpPower
+        savedPhysics.breakJointsOnDeath = humanoid.BreakJointsOnDeath
+        savedPhysics.sit = humanoid.Sit
+        humanoid.WalkSpeed = 0
+        humanoid.JumpPower = 0
+        humanoid.AutoRotate = false
+        humanoid.PlatformStand = true
+        humanoid.HipHeight = 0
+        humanoid.MaxSlopeAngle = 0
+        humanoid.UseJumpPower = false
+        humanoid.BreakJointsOnDeath = false
+        humanoid.Sit = false
+    end
+    if hrp then
+        savedPhysics.velocity = hrp.Velocity
+        savedPhysics.rotationalVelocity = hrp.RotVelocity
+        savedPhysics.assemblyLinearVelocity = hrp.AssemblyLinearVelocity
+        savedPhysics.assemblyAngularVelocity = hrp.AssemblyAngularVelocity
+        hrp.Velocity = Vector3.new(0, 0, 0)
+        hrp.RotVelocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    end
+    for _, part in ipairs(char:GetChildren()) do
+        if part:IsA("BasePart") then
+            pcall(function()
+                part.Velocity = Vector3.new(0, 0, 0)
+                part.RotVelocity = Vector3.new(0, 0, 0)
+                part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            end)
+        end
+    end
+end
+
+local function restorePhysics()
+    local char = lp.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        if savedPhysics.walkSpeed ~= nil then humanoid.WalkSpeed = savedPhysics.walkSpeed end
+        if savedPhysics.jumpPower ~= nil then humanoid.JumpPower = savedPhysics.jumpPower end
+        if savedPhysics.autoRotate ~= nil then humanoid.AutoRotate = savedPhysics.autoRotate end
+        if savedPhysics.platformStand ~= nil then humanoid.PlatformStand = savedPhysics.platformStand end
+        if savedPhysics.hipHeight ~= nil then humanoid.HipHeight = savedPhysics.hipHeight end
+        if savedPhysics.maxSlopeAngle ~= nil then humanoid.MaxSlopeAngle = savedPhysics.maxSlopeAngle end
+        if savedPhysics.useJumpPower ~= nil then humanoid.UseJumpPower = savedPhysics.useJumpPower end
+        if savedPhysics.breakJointsOnDeath ~= nil then humanoid.BreakJointsOnDeath = savedPhysics.breakJointsOnDeath end
+        if savedPhysics.sit ~= nil then humanoid.Sit = savedPhysics.sit end
+    end
+    if hrp then
+        if savedPhysics.velocity ~= nil then hrp.Velocity = savedPhysics.velocity end
+        if savedPhysics.rotationalVelocity ~= nil then hrp.RotVelocity = savedPhysics.rotationalVelocity end
+        if savedPhysics.assemblyLinearVelocity ~= nil then hrp.AssemblyLinearVelocity = savedPhysics.assemblyLinearVelocity end
+        if savedPhysics.assemblyAngularVelocity ~= nil then hrp.AssemblyAngularVelocity = savedPhysics.assemblyAngularVelocity end
+    end
+end
+
+-- ==================== UI面板 ====================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "MultiToolUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = lp:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 220, 0, 300)
+mainFrame.Position = UDim2.new(0.02, 0, 0.15, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+mainFrame.BackgroundTransparency = 0.05
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.Parent = mainFrame
+
+local title = Instance.new("Frame")
+title.Size = UDim2.new(1, 0, 0, 32)
+title.Position = UDim2.new(0, 0, 0, 0)
+title.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+title.BackgroundTransparency = 0
+title.BorderSizePixel = 0
+title.Parent = mainFrame
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = title
+
+local titleText = Instance.new("TextLabel")
+titleText.Size = UDim2.new(0.5, 0, 1, 0)
+titleText.Position = UDim2.new(0, 10, 0, 0)
+titleText.BackgroundTransparency = 1
+titleText.Text = "多功能工具"
+titleText.TextColor3 = Color3.new(1, 1, 1)
+titleText.TextSize = 14
+titleText.Font = Enum.Font.GothamBold
+titleText.TextXAlignment = Enum.TextXAlignment.Left
+titleText.Parent = title
+
+local collapseBtn = Instance.new("TextButton")
+collapseBtn.Size = UDim2.new(0, 28, 0, 28)
+collapseBtn.Position = UDim2.new(1, -65, 0.5, -14)
+collapseBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+collapseBtn.Text = "−"
+collapseBtn.TextColor3 = Color3.new(1, 1, 1)
+collapseBtn.TextSize = 14
+collapseBtn.Font = Enum.Font.GothamBold
+collapseBtn.AutoButtonColor = true
+collapseBtn.Parent = title
+local collapseCorner = Instance.new("UICorner")
+collapseCorner.CornerRadius = UDim.new(0, 5)
+collapseCorner.Parent = collapseBtn
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 28, 0, 28)
+closeBtn.Position = UDim2.new(1, -33, 0.5, -14)
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.new(1, 1, 1)
+closeBtn.TextSize = 13
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.AutoButtonColor = false
+closeBtn.Parent = title
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 5)
+closeCorner.Parent = closeBtn
+
+local content = Instance.new("Frame")
+content.Size = UDim2.new(1, 0, 1, -32)
+content.Position = UDim2.new(0, 0, 0, 32)
+content.BackgroundTransparency = 1
+content.Parent = mainFrame
+
+-- ========== 折叠功能 ==========
+local isCollapsed = false
+
+local function toggleCollapse()
+    isCollapsed = not isCollapsed
+    if isCollapsed then
+        content.Visible = false
+        collapseBtn.Text = "+"
+        mainFrame.Size = UDim2.new(0, 220, 0, 32)
+    else
+        content.Visible = true
+        collapseBtn.Text = "−"
+        mainFrame.Size = UDim2.new(0, 220, 0, 300)
+    end
+end
+
+collapseBtn.MouseButton1Click:Connect(toggleCollapse)
+collapseBtn.TouchTap:Connect(toggleCollapse)
+
+-- ========== 标题栏拖拽 ==========
+local dragData = {dragging = false, offset = Vector2.new()}
+
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragData.dragging = true
+        dragData.offset = Vector2.new(input.Position.X - mainFrame.AbsolutePosition.X, input.Position.Y - mainFrame.AbsolutePosition.Y)
+        input:Ignore()
+    end
+end)
+
+title.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragData.dragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragData.dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        mainFrame.Position = UDim2.new(0, input.Position.X - dragData.offset.X, 0, input.Position.Y - dragData.offset.Y)
+    end
+end)
+
+-- ========== 创建开关的函数 ==========
+local function createToggle(name, posY, color)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, -20, 0, 50)
+    frame.Position = UDim2.new(0, 10, 0, posY)
+    frame.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
+    frame.BorderSizePixel = 0
+    frame.Parent = content
+    
+    local frameCorner = Instance.new("UICorner")
+    frameCorner.CornerRadius = UDim.new(0, 6)
+    frameCorner.Parent = frame
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.6, 0, 1, 0)
+    label.Position = UDim2.new(0, 8, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = color
+    label.TextSize = 12
+    label.Font = Enum.Font.GothamBold
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = frame
+    
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0, 40, 0, 26)
+    toggleBtn.Position = UDim2.new(1, -48, 0.5, -13)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    toggleBtn.Text = "关"
+    toggleBtn.TextColor3 = Color3.new(1, 1, 1)
+    toggleBtn.TextSize = 12
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.AutoButtonColor = true
+    toggleBtn.Parent = frame
+    
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 5)
+    btnCorner.Parent = toggleBtn
+    
+    local light = Instance.new("Frame")
+    light.Size = UDim2.new(0, 8, 0, 8)
+    light.Position = UDim2.new(1, -12, 0.5, -4)
+    light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    light.BorderSizePixel = 0
+    light.Parent = toggleBtn
+    
+    local lightCorner = Instance.new("UICorner")
+    lightCorner.CornerRadius = UDim.new(0, 4)
+    lightCorner.Parent = light
+    
+    return {btn = toggleBtn, light = light}
+end
+
+-- ========== 创建四个开关 ==========
+local toggle1 = createToggle("刷副本(Vanilla)", 5, Color3.fromRGB(255, 200, 100))
+local toggle2 = createToggle("Polnareff自动化", 60, Color3.fromRGB(100, 200, 255))
+local toggle3 = createToggle("洗属性(普通)", 115, Color3.fromRGB(100, 255, 100))
+local toggle4 = createToggle("洗属性(蓄能)", 170, Color3.fromRGB(255, 150, 50))
+
+-- ==================== 脚本1：刷副本(Vanilla) ====================
+local vanillaEnabled = false
+local vanillaMainLoop = nil
+local vanillaFollow = nil
+local vanillaAttack = nil
+local vanillaStopAttack = false
+
+local function getVanilla()
+    local world = Workspace:FindFirstChild("World")
+    if not world then return nil end
+    local map = world:FindFirstChild("Map")
+    if not map then return nil end
+    local lairs = map:FindFirstChild("Lairs")
+    if not lairs then return nil end
+    local model = lairs:FindFirstChild("Model")
+    if not model then return nil end
+    local alive = model:FindFirstChild("Alive")
+    if not alive then return nil end
+    return alive:FindFirstChild("Vanilla")
+end
+
+local function getVanillaHead()
+    local npc = getVanilla()
+    if not npc then return nil end
+    return npc:FindFirstChild("Head")
+end
+
+local function getVanillaHumanoid()
+    local npc = getVanilla()
+    if not npc then return nil end
+    return npc:FindFirstChildOfClass("Humanoid")
+end
+
+local function teleportAboveVanilla()
+    local head = getVanillaHead()
+    if not head then return false end
+    local headPos = head.Position
+    local abovePos = headPos + Vector3.new(0, 10, 0)
+    local char = lp.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    hrp.CFrame = CFrame.lookAt(abovePos, headPos)
+    return true
+end
+
+local function triggerLair()
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Library")
+        if remotes then
+            remotes = remotes:FindFirstChild("Remotes")
+            if remotes then
+                local lair = remotes:FindFirstChild("Lair")
+                if lair then
+                    lair:FireServer("200")
+                end
+            end
+        end
+    end)
+end
+
+local function triggerAttackVanilla()
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Library")
+        if remotes then
+            remotes = remotes:FindFirstChild("Remotes")
+            if remotes then
+                local input = remotes:FindFirstChild("Input")
+                if input then
+                    input:InvokeServer(Enum.UserInputType.MouseButton1, Enum.UserInputState.Begin)
+                end
+            end
+        end
+    end)
+end
+
+local function triggerHSkill()
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Library")
+        if remotes then
+            remotes = remotes:FindFirstChild("Remotes")
+            if remotes then
+                local input = remotes:FindFirstChild("Input")
+                if input then
+                    input:InvokeServer(Enum.KeyCode.H, Enum.UserInputState.Begin)
+                end
+            end
+        end
+    end)
+end
+
+local function attackCombo()
+    for i = 1, 6 do
+        if not vanillaEnabled then break end
+        triggerAttackVanilla()
+        task.wait(0.25)
+    end
+    if not vanillaEnabled then return end
+    triggerHSkill()
+    task.wait(0.25)
+end
+
+local function waitForVanilla()
+    while vanillaEnabled do
+        if getVanilla() then return true end
+        task.wait(0.25)
+    end
+    return false
+end
+
+local function startVanillaFollow()
+    if vanillaFollow then return end
+    vanillaFollow = RunService.Heartbeat:Connect(function()
+        if not vanillaEnabled then return end
+        local humanoid = getVanillaHumanoid()
+        if humanoid and humanoid.Health <= 0 then return end
+        teleportAboveVanilla()
+    end)
+end
+
+local function stopVanillaFollow()
+    if vanillaFollow then
+        vanillaFollow:Disconnect()
+        vanillaFollow = nil
+    end
+end
+
+local function startVanillaAttack()
+    if vanillaAttack then return end
+    vanillaStopAttack = false
+    vanillaAttack = task.spawn(function()
+        local waitTime = 4
+        while waitTime > 0 and vanillaEnabled and not vanillaStopAttack do
+            task.wait(1)
+            waitTime = waitTime - 1
+        end
+        while vanillaEnabled and not vanillaStopAttack do
+            local humanoid = getVanillaHumanoid()
+            if humanoid and humanoid.Health > 0 then
+                attackCombo()
+            else
+                break
+            end
+        end
+        vanillaAttack = nil
+    end)
+end
+
+local function stopVanillaAttack()
+    vanillaStopAttack = true
+    if vanillaAttack then
+        task.cancel(vanillaAttack)
+        vanillaAttack = nil
+    end
+end
+
+-- ========== 主循环（修改后） ==========
+local function startVanillaLoop()
+    if vanillaMainLoop then return end
+    vanillaMainLoop = task.spawn(function()
+        while vanillaEnabled do
+            triggerLair()
+            task.wait(0.25)
+            
+            if not waitForVanilla() then
+                continue
+            end
+            
+            startVanillaFollow()
+            startVanillaAttack()
+            
+            while vanillaEnabled do
+                local humanoid = getVanillaHumanoid()
+                if not humanoid or humanoid.Health <= 0 then
+                    break
+                end
+                task.wait(0.1)
+            end
+            
+            stopVanillaAttack()
+            stopVanillaFollow()
+            
+            -- Boss死亡后等待1秒，再触发一次Lair，等0.5秒后循环
+            task.wait(1)
+            triggerLair()
+            task.wait(0.5)
+        end
+        vanillaMainLoop = nil
+    end)
+end
+
+local function stopVanillaLoop()
+    vanillaEnabled = false
+    stopVanillaAttack()
+    stopVanillaFollow()
+    if vanillaMainLoop then
+        task.cancel(vanillaMainLoop)
+        vanillaMainLoop = nil
+    end
+end
+
+-- ==================== 脚本2：Polnareff自动化 ====================
+local polnareffEnabled = false
+local polnareffFollow = nil
+local polnareffAttack = nil
+local polnareffRadius = nil
+local polnareffQuest = nil
+
+local function getPolnareff()
+    local world = Workspace:FindFirstChild("World")
+    if not world then return nil end
+    local living = world:FindFirstChild("Living")
+    if not living then return nil end
+    return living:FindFirstChild("Polnareff")
+end
+
+local function getPolnareffUpperTorso()
+    local npc = getPolnareff()
+    if not npc then return nil end
+    return npc:FindFirstChild("UpperTorso")
+end
+
+local function getPolnareffHumanoid()
+    local npc = getPolnareff()
+    if not npc then return nil end
+    return npc:FindFirstChildOfClass("Humanoid")
+end
+
+local function teleportAbovePolnareff()
+    local upperTorso = getPolnareffUpperTorso()
+    if not upperTorso then return false end
+    local char = lp.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    local npcPos = upperTorso.Position
+    local abovePos = npcPos + Vector3.new(0, 5, 0)
+    hrp.CFrame = CFrame.lookAt(abovePos, npcPos)
+    return true
+end
+
+local function triggerAttackPolnareff()
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Library")
+        if remotes then
+            remotes = remotes:FindFirstChild("Remotes")
+            if remotes then
+                local input = remotes:FindFirstChild("Input")
+                if input then
+                    input:InvokeServer(Enum.UserInputType.MouseButton1, Enum.UserInputState.Begin)
+                end
+            end
+        end
+    end)
+end
+
+local function setPolnareffHealthZero()
+    local humanoid = getPolnareffHumanoid()
+    if humanoid then
+        pcall(function() humanoid.Health = 0 end)
+    end
+end
+
+local function startPolnareffAttack()
+    if polnareffAttack then return end
+    polnareffAttack = task.spawn(function()
+        while polnareffEnabled do
+            local humanoid = getPolnareffHumanoid()
+            if humanoid and humanoid.Health > 0 then
+                triggerAttackPolnareff()
+                task.wait(0.05)
+                setPolnareffHealthZero()
+            end
+            task.wait(0.2)
+        end
+        polnareffAttack = nil
+    end)
+end
+
+local function stopPolnareffAttack()
+    if polnareffAttack then
+        task.cancel(polnareffAttack)
+        polnareffAttack = nil
+    end
+end
+
+local function startPolnareffFollow()
+    if polnareffFollow then return end
+    polnareffFollow = RunService.Heartbeat:Connect(function()
+        if polnareffEnabled then
+            teleportAbovePolnareff()
+        end
+    end)
+end
+
+local function stopPolnareffFollow()
+    if polnareffFollow then
+        polnareffFollow:Disconnect()
+        polnareffFollow = nil
+    end
+end
+
+local function expandRadius()
+    pcall(function()
+        sethiddenproperty(lp, "SimulationRadius", 112412400000)
+        sethiddenproperty(lp, "MaxSimulationRadius", 112412400000)
+    end)
+end
+
+local function startPolnareffRadius()
+    if polnareffRadius then return end
+    polnareffRadius = task.spawn(function()
+        while polnareffEnabled do
+            expandRadius()
+            task.wait(0.5)
+        end
+        polnareffRadius = nil
+    end)
+end
+
+local function stopPolnareffRadius()
+    if polnareffRadius then
+        task.cancel(polnareffRadius)
+        polnareffRadius = nil
+    end
+end
+
+local function triggerQuest()
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Library")
+        if remotes then
+            remotes = remotes:FindFirstChild("Remotes")
+            if remotes then
+                local quest = remotes:FindFirstChild("Quest")
+                if quest then
+                    quest:InvokeServer("Response", "admpn")
+                    task.wait(0.1)
+                    quest:InvokeServer("Start", "admpn")
+                end
+            end
+        end
+    end)
+end
+
+local function startPolnareffQuest()
+    if polnareffQuest then return end
+    polnareffQuest = task.spawn(function()
+        while polnareffEnabled do
+            triggerQuest()
+            task.wait(0.5)
+        end
+        polnareffQuest = nil
+    end)
+end
+
+local function stopPolnareffQuest()
+    if polnareffQuest then
+        task.cancel(polnareffQuest)
+        polnareffQuest = nil
+    end
+end
+
+local function startPolnareffAll()
+    disablePhysics()
+    startPolnareffFollow()
+    startPolnareffAttack()
+    startPolnareffRadius()
+    startPolnareffQuest()
+end
+
+local function stopPolnareffAll()
+    restorePhysics()
+    stopPolnareffFollow()
+    stopPolnareffAttack()
+    stopPolnareffRadius()
+    stopPolnareffQuest()
+end
+
+-- ==================== 脚本3：自动洗属性（双模式） ====================
+local attrRunning1 = false
+local attrRunning2 = false
+
+local abilityBlacklist = {
+    "Crazy Diamond",
+    "The Hand",
+    "Magician's Red",
+    "Silver Chariot",
+    "Cream",
+    "White Snake",
+    "Star Platinum Stone Ocean",
+    "The Emperor",
+    "Sticky Fingers",
+    "Stone Free",
+    "Killer Queen",
+    "Hierophant Green"
+}
+
+local targetAttributes = {"Forceful", "Legendary"}
+
+local function getCurrentAbility()
+    local data = lp:FindFirstChild("Data")
+    if not data then return nil end
+    local stats = data:FindFirstChild("Stats")
+    if not stats then return nil end
+    local ability = stats:FindFirstChild("Ability")
+    if ability then
+        return ability.Value
+    end
+    return nil
+end
+
+local function checkAbilityBlacklist(ability)
+    if not ability then return false end
+    for _, black in ipairs(abilityBlacklist) do
+        if ability == black then
+            return true
+        end
+    end
+    return false
+end
+
+local function sendItem(itemName)
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Library")
+        if remotes then
+            remotes = remotes:FindFirstChild("Remotes")
+            if remotes then
+                local send = remotes:FindFirstChild("Send")
+                if send then
+                    send:FireServer("Item", itemName)
+                end
+            end
+        end
+    end)
+end
+
+local function getCurrentAttribute()
+    local data = lp:FindFirstChild("Data")
+    if not data then return nil end
+    local stats = data:FindFirstChild("Stats")
+    if not stats then return nil end
+    local attr = stats:FindFirstChild("Attribute")
+    if attr then
+        return attr.Value
+    end
+    return nil
+end
+
+local function checkAttribute(attr)
+    if not attr then return false end
+    for _, target in ipairs(targetAttributes) do
+        if attr == target then return true end
+    end
+    return false
+end
+
+local function startAttrLoop(itemName, btn, light)
+    if attrRunning1 or attrRunning2 then
+        showNotification("⚠️ 提示", "另一个洗属性开关正在运行", 2)
+        return
+    end
+    attrRunning1 = true
+    local originalText = btn.Text
+    btn.Text = "开"
+    btn.BackgroundColor3 = Color3.fromRGB(0, 120, 80)
+    light.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    
+    task.spawn(function()
+        while attrRunning1 do
+            sendItem(itemName)
+            
+            for i = 5, 1, -1 do
+                if not attrRunning1 then break end
+                task.wait(1)
+            end
+            if not attrRunning1 then break end
+            
+            local ability = getCurrentAbility()
+            if ability and checkAbilityBlacklist(ability) then
+                showNotification("🔄 黑名单替身", ability .. " 在黑名单中，使用Rokakaka", 2)
+                sendItem("Rokakaka")
+                task.wait(1)
+                continue
+            end
+            
+            local attr = getCurrentAttribute()
+            if attr and checkAttribute(attr) then
+                showNotification("🎯 目标属性", "已获得 " .. attr, 3)
+                attrRunning1 = false
+                btn.Text = originalText
+                btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+                light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+                attrRunning2 = false
+                return
+            end
+            
+            sendItem("Rokakaka")
+            task.wait(1)
+        end
+        btn.Text = originalText
+        btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        attrRunning2 = false
+    end)
+end
+
+local function startAttrLoop2(itemName, btn, light)
+    if attrRunning1 or attrRunning2 then
+        showNotification("⚠️ 提示", "另一个洗属性开关正在运行", 2)
+        return
+    end
+    attrRunning2 = true
+    local originalText = btn.Text
+    btn.Text = "开"
+    btn.BackgroundColor3 = Color3.fromRGB(0, 120, 80)
+    light.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    
+    task.spawn(function()
+        while attrRunning2 do
+            sendItem(itemName)
+            
+            for i = 5, 1, -1 do
+                if not attrRunning2 then break end
+                task.wait(1)
+            end
+            if not attrRunning2 then break end
+            
+            local ability = getCurrentAbility()
+            if ability and checkAbilityBlacklist(ability) then
+                showNotification("🔄 黑名单替身", ability .. " 在黑名单中，使用Rokakaka", 2)
+                sendItem("Rokakaka")
+                task.wait(1)
+                continue
+            end
+            
+            local attr = getCurrentAttribute()
+            if attr and checkAttribute(attr) then
+                showNotification("🎯 目标属性", "已获得 " .. attr, 3)
+                attrRunning2 = false
+                btn.Text = originalText
+                btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+                light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+                attrRunning1 = false
+                return
+            end
+            
+            sendItem("Rokakaka")
+            task.wait(1)
+        end
+        btn.Text = originalText
+        btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        attrRunning1 = false
+    end)
+end
+
+local function stopAttrLoop(btn, light)
+    attrRunning1 = false
+    attrRunning2 = false
+    btn.Text = "关"
+    btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+end
+
+-- ==================== 开关绑定 ====================
+toggle1.btn.MouseButton1Click:Connect(function()
+    if vanillaEnabled then
+        vanillaEnabled = false
+        stopVanillaLoop()
+        toggle1.btn.Text = "关"
+        toggle1.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        toggle1.light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        restorePhysics()
+        showNotification("❌ 刷副本", "已关闭", 2)
+    else
+        vanillaEnabled = true
+        toggle1.btn.Text = "开"
+        toggle1.btn.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
+        toggle1.light.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        disablePhysics()
+        startVanillaLoop()
+        showNotification("✅ 刷副本", "已开启（物理全关）", 2)
+    end
+end)
+
+toggle2.btn.MouseButton1Click:Connect(function()
+    if polnareffEnabled then
+        polnareffEnabled = false
+        stopPolnareffAll()
+        toggle2.btn.Text = "关"
+        toggle2.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        toggle2.light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        showNotification("❌ Polnareff", "已关闭", 2)
+    else
+        polnareffEnabled = true
+        toggle2.btn.Text = "开"
+        toggle2.btn.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
+        toggle2.light.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        startPolnareffAll()
+        showNotification("✅ Polnareff", "已开启（物理全关）", 2)
+    end
+end)
+
+toggle3.btn.MouseButton1Click:Connect(function()
+    if attrRunning1 then
+        stopAttrLoop(toggle3.btn, toggle3.light)
+        showNotification("❌ 洗属性(普通)", "已关闭", 2)
+    else
+        startAttrLoop("Stand Arrow", toggle3.btn, toggle3.light)
+    end
+end)
+
+toggle4.btn.MouseButton1Click:Connect(function()
+    if attrRunning2 then
+        stopAttrLoop(toggle4.btn, toggle4.light)
+        showNotification("❌ 洗属性(蓄能)", "已关闭", 2)
+    else
+        startAttrLoop2("Unusual Arrow", toggle4.btn, toggle4.light)
+    end
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    if vanillaEnabled then
+        vanillaEnabled = false
+        stopVanillaLoop()
+        restorePhysics()
+    end
+    if polnareffEnabled then
+        polnareffEnabled = false
+        stopPolnareffAll()
+    end
+    if attrRunning1 then
+        attrRunning1 = false
+    end
+    if attrRunning2 then
+        attrRunning2 = false
+    end
+    screenGui:Destroy()
+end)
+
+print("✅ 多功能整合脚本已加载")
+print("📌 四个独立开关：刷副本 | Polnareff | 洗属性(普通) | 洗属性(蓄能)")
