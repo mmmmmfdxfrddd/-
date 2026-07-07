@@ -347,32 +347,6 @@ local function triggerAttackVanilla()
     end)
 end
 
-local function triggerHSkill()
-    pcall(function()
-        local remotes = ReplicatedStorage:FindFirstChild("Library")
-        if remotes then
-            remotes = remotes:FindFirstChild("Remotes")
-            if remotes then
-                local input = remotes:FindFirstChild("Input")
-                if input then
-                    input:InvokeServer(Enum.KeyCode.H, Enum.UserInputState.Begin)
-                end
-            end
-        end
-    end)
-end
-
-local function attackCombo()
-    for i = 1, 6 do
-        if not vanillaEnabled then break end
-        triggerAttackVanilla()
-        task.wait(0.25)
-    end
-    if not vanillaEnabled then return end
-    triggerHSkill()
-    task.wait(0.25)
-end
-
 local function waitForVanilla()
     while vanillaEnabled do
         if getVanilla() then return true end
@@ -402,7 +376,7 @@ local function startVanillaAttack()
     if vanillaAttack then return end
     vanillaStopAttack = false
     vanillaAttack = task.spawn(function()
-        local waitTime = 4
+        local waitTime = 5
         while waitTime > 0 and vanillaEnabled and not vanillaStopAttack do
             task.wait(1)
             waitTime = waitTime - 1
@@ -410,7 +384,8 @@ local function startVanillaAttack()
         while vanillaEnabled and not vanillaStopAttack do
             local humanoid = getVanillaHumanoid()
             if humanoid and humanoid.Health > 0 then
-                attackCombo()
+                triggerAttackVanilla()
+                task.wait(0.1)
             else
                 break
             end
@@ -427,7 +402,6 @@ local function stopVanillaAttack()
     end
 end
 
--- ========== 主循环（修改后） ==========
 local function startVanillaLoop()
     if vanillaMainLoop then return end
     vanillaMainLoop = task.spawn(function()
@@ -453,7 +427,6 @@ local function startVanillaLoop()
             stopVanillaAttack()
             stopVanillaFollow()
             
-            -- Boss死亡后等待1秒，再触发一次Lair，等0.5秒后循环
             task.wait(1)
             triggerLair()
             task.wait(0.5)
@@ -665,10 +638,22 @@ local abilityBlacklist = {
     "Sticky Fingers",
     "Stone Free",
     "Killer Queen",
-    "Hierophant Green"
+    "Hierophant Green",
+    "Aerosmith",
+    "Weather Report",
+    "Soft And Wet",
+    "Echoes Act"
 }
 
-local targetAttributes = {"Forceful", "Legendary"}
+local abilityWhitelist = {
+    "Jotaro's Star Platinum",
+    "The World OVA",
+    "Star Platinum OVA",
+    "Dio's The World",
+    "Anubis"
+}
+
+local targetAttributes = {"Legendary", "Critical", "Multiply", "Thief", "Forceful"}
 
 local function getCurrentAbility()
     local data = lp:FindFirstChild("Data")
@@ -686,6 +671,16 @@ local function checkAbilityBlacklist(ability)
     if not ability then return false end
     for _, black in ipairs(abilityBlacklist) do
         if ability == black then
+            return true
+        end
+    end
+    return false
+end
+
+local function checkAbilityWhitelist(ability)
+    if not ability then return false end
+    for _, white in ipairs(abilityWhitelist) do
+        if ability == white then
             return true
         end
     end
@@ -749,6 +744,18 @@ local function startAttrLoop(itemName, btn, light)
             if not attrRunning1 then break end
             
             local ability = getCurrentAbility()
+            local attr = getCurrentAttribute()
+            
+            if ability and checkAbilityWhitelist(ability) and attr and checkAttribute(attr) then
+                showNotification("🎯 目标组合", ability .. " + " .. attr .. "，已停止", 3)
+                attrRunning1 = false
+                btn.Text = originalText
+                btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+                light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+                attrRunning2 = false
+                return
+            end
+            
             if ability and checkAbilityBlacklist(ability) then
                 showNotification("🔄 黑名单替身", ability .. " 在黑名单中，使用Rokakaka", 2)
                 sendItem("Rokakaka")
@@ -756,7 +763,6 @@ local function startAttrLoop(itemName, btn, light)
                 continue
             end
             
-            local attr = getCurrentAttribute()
             if attr and checkAttribute(attr) then
                 showNotification("🎯 目标属性", "已获得 " .. attr, 3)
                 attrRunning1 = false
@@ -799,6 +805,18 @@ local function startAttrLoop2(itemName, btn, light)
             if not attrRunning2 then break end
             
             local ability = getCurrentAbility()
+            local attr = getCurrentAttribute()
+            
+            if ability and checkAbilityWhitelist(ability) and attr and checkAttribute(attr) then
+                showNotification("🎯 目标组合", ability .. " + " .. attr .. "，已停止", 3)
+                attrRunning2 = false
+                btn.Text = originalText
+                btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+                light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+                attrRunning1 = false
+                return
+            end
+            
             if ability and checkAbilityBlacklist(ability) then
                 showNotification("🔄 黑名单替身", ability .. " 在黑名单中，使用Rokakaka", 2)
                 sendItem("Rokakaka")
@@ -850,7 +868,19 @@ toggle1.btn.MouseButton1Click:Connect(function()
         toggle1.btn.Text = "开"
         toggle1.btn.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
         toggle1.light.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        
         disablePhysics()
+        
+        local char = lp.Character
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.CFrame = CFrame.new(-679.340, -115.262, -809.080)
+            end
+        end
+        
+        task.wait(1)
+        
         startVanillaLoop()
         showNotification("✅ 刷副本", "已开启（物理全关）", 2)
     end
