@@ -653,7 +653,11 @@ local abilityWhitelist = {
     "Anubis"
 }
 
-local targetAttributes = {"Legendary", "Critical", "Multiply", "Thief", "Forceful"}
+-- 第1层用的属性列表（5个）
+local firstLayerAttributes = {"Legendary", "Critical", "Multiply", "Thief", "Forceful"}
+
+-- 第3层用的属性列表（只保留2个）
+local thirdLayerAttributes = {"Forceful", "Legendary"}
 
 local function getCurrentAbility()
     local data = lp:FindFirstChild("Data")
@@ -687,6 +691,22 @@ local function checkAbilityWhitelist(ability)
     return false
 end
 
+local function checkFirstLayerAttribute(attr)
+    if not attr then return false end
+    for _, target in ipairs(firstLayerAttributes) do
+        if attr == target then return true end
+    end
+    return false
+end
+
+local function checkThirdLayerAttribute(attr)
+    if not attr then return false end
+    for _, target in ipairs(thirdLayerAttributes) do
+        if attr == target then return true end
+    end
+    return false
+end
+
 local function sendItem(itemName)
     pcall(function()
         local remotes = ReplicatedStorage:FindFirstChild("Library")
@@ -714,14 +734,6 @@ local function getCurrentAttribute()
     return nil
 end
 
-local function checkAttribute(attr)
-    if not attr then return false end
-    for _, target in ipairs(targetAttributes) do
-        if attr == target then return true end
-    end
-    return false
-end
-
 local function startAttrLoop(itemName, btn, light)
     if attrRunning1 or attrRunning2 then
         showNotification("⚠️ 提示", "另一个洗属性开关正在运行", 2)
@@ -743,10 +755,11 @@ local function startAttrLoop(itemName, btn, light)
             end
             if not attrRunning1 then break end
             
+            -- 第1层检测：白名单替身 + 好属性（5个）
             local ability = getCurrentAbility()
             local attr = getCurrentAttribute()
             
-            if ability and checkAbilityWhitelist(ability) and attr and checkAttribute(attr) then
+            if ability and checkAbilityWhitelist(ability) and attr and checkFirstLayerAttribute(attr) then
                 showNotification("🎯 目标组合", ability .. " + " .. attr .. "，已停止", 3)
                 attrRunning1 = false
                 btn.Text = originalText
@@ -756,6 +769,7 @@ local function startAttrLoop(itemName, btn, light)
                 return
             end
             
+            -- 第2层检测：黑名单替身
             if ability and checkAbilityBlacklist(ability) then
                 showNotification("🔄 黑名单替身", ability .. " 在黑名单中，使用Rokakaka", 2)
                 sendItem("Rokakaka")
@@ -763,7 +777,8 @@ local function startAttrLoop(itemName, btn, light)
                 continue
             end
             
-            if attr and checkAttribute(attr) then
+            -- 第3层检测：只保留 Forceful 和 Legendary
+            if attr and checkThirdLayerAttribute(attr) then
                 showNotification("🎯 目标属性", "已获得 " .. attr, 3)
                 attrRunning1 = false
                 btn.Text = originalText
@@ -804,10 +819,11 @@ local function startAttrLoop2(itemName, btn, light)
             end
             if not attrRunning2 then break end
             
+            -- 第1层检测：白名单替身 + 好属性（5个）
             local ability = getCurrentAbility()
             local attr = getCurrentAttribute()
             
-            if ability and checkAbilityWhitelist(ability) and attr and checkAttribute(attr) then
+            if ability and checkAbilityWhitelist(ability) and attr and checkFirstLayerAttribute(attr) then
                 showNotification("🎯 目标组合", ability .. " + " .. attr .. "，已停止", 3)
                 attrRunning2 = false
                 btn.Text = originalText
@@ -817,6 +833,7 @@ local function startAttrLoop2(itemName, btn, light)
                 return
             end
             
+            -- 第2层检测：黑名单替身
             if ability and checkAbilityBlacklist(ability) then
                 showNotification("🔄 黑名单替身", ability .. " 在黑名单中，使用Rokakaka", 2)
                 sendItem("Rokakaka")
@@ -824,8 +841,9 @@ local function startAttrLoop2(itemName, btn, light)
                 continue
             end
             
+            -- 第3层检测：只保留 Forceful 和 Legendary
             local attr = getCurrentAttribute()
-            if attr and checkAttribute(attr) then
+            if attr and checkThirdLayerAttribute(attr) then
                 showNotification("🎯 目标属性", "已获得 " .. attr, 3)
                 attrRunning2 = false
                 btn.Text = originalText
