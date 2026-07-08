@@ -1,4 +1,4 @@
--- ========== 多功能整合脚本 ==========
+-- ========== 多功能整合脚本（修复三层逻辑） ==========
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
@@ -622,7 +622,7 @@ local function stopPolnareffAll()
     stopPolnareffQuest()
 end
 
--- ==================== 脚本3：自动洗属性（双模式） ====================
+-- ==================== 脚本3：自动洗属性（三层递进修复版） ====================
 local attrRunning1 = false
 local attrRunning2 = false
 
@@ -653,10 +653,10 @@ local abilityWhitelist = {
     "Anubis"
 }
 
--- 第1层用的属性列表（5个）
+-- 🔥 第1层属性：只有同时满足白名单替身+这些属性才停
 local firstLayerAttributes = {"Legendary", "Critical", "Multiply", "Thief", "Forceful"}
 
--- 第3层用的属性列表（只保留2个）
+-- 🔥 第3层属性：兜底保留
 local thirdLayerAttributes = {"Forceful", "Legendary"}
 
 local function getCurrentAbility()
@@ -667,6 +667,18 @@ local function getCurrentAbility()
     local ability = stats:FindFirstChild("Ability")
     if ability then
         return ability.Value
+    end
+    return nil
+end
+
+local function getCurrentAttribute()
+    local data = lp:FindFirstChild("Data")
+    if not data then return nil end
+    local stats = data:FindFirstChild("Stats")
+    if not stats then return nil end
+    local attr = stats:FindFirstChild("Attribute")
+    if attr then
+        return attr.Value
     end
     return nil
 end
@@ -722,16 +734,36 @@ local function sendItem(itemName)
     end)
 end
 
-local function getCurrentAttribute()
-    local data = lp:FindFirstChild("Data")
-    if not data then return nil end
-    local stats = data:FindFirstChild("Stats")
-    if not stats then return nil end
-    local attr = stats:FindFirstChild("Attribute")
-    if attr then
-        return attr.Value
+-- 🔥 修复后的三层递进检测
+local function checkAttributeResult()
+    local ability = getCurrentAbility()
+    local attr = getCurrentAttribute()
+    
+    -- 第1层：白名单替身 AND 好属性 → 完美，停止
+    if ability and checkAbilityWhitelist(ability) and attr and checkFirstLayerAttribute(attr) then
+        showNotification("🎯 完美匹配(第1层)", ability .. " + " .. attr .. "，已停止", 4)
+        return "perfect"
     end
-    return nil
+    
+    -- 第2层：没通过第1层，检查是否黑名单替身 → 吃Roka跳过
+    if ability and checkAbilityBlacklist(ability) then
+        showNotification("🔄 黑名单替身(第2层)", ability .. "，使用Rokakaka跳过", 2)
+        sendItem("Rokakaka")
+        task.wait(1)
+        return "reroll"
+    end
+    
+    -- 第3层：兜底，属性是 Forceful 或 Legendary → 保留停止
+    if attr and checkThirdLayerAttribute(attr) then
+        showNotification("🎯 兜底保留(第3层)", "属性: " .. attr .. "，已停止", 3)
+        return "keep"
+    end
+    
+    -- 都不满足 → 吃Roka继续
+    showNotification("🔄 不满足条件", "当前: " .. (ability or "?") .. " / " .. (attr or "?"), 1)
+    sendItem("Rokakaka")
+    task.wait(1)
+    return "continue"
 end
 
 local function startAttrLoop(itemName, btn, light)
@@ -740,7 +772,6 @@ local function startAttrLoop(itemName, btn, light)
         return
     end
     attrRunning1 = true
-    local originalText = btn.Text
     btn.Text = "开"
     btn.BackgroundColor3 = Color3.fromRGB(0, 120, 80)
     light.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
@@ -749,51 +780,31 @@ local function startAttrLoop(itemName, btn, light)
         while attrRunning1 do
             sendItem(itemName)
             
+            -- 等5秒让箭生效
             for i = 5, 1, -1 do
                 if not attrRunning1 then break end
                 task.wait(1)
             end
             if not attrRunning1 then break end
             
-            -- 第1层检测：白名单替身 + 好属性（5个）
-            local ability = getCurrentAbility()
-            local attr = getCurrentAttribute()
+            -- 三层检测
+            local result = checkAttributeResult()
             
-            if ability and checkAbilityWhitelist(ability) and attr and checkFirstLayerAttribute(attr) then
-                showNotification("🎯 目标组合", ability .. " + " .. attr .. "，已停止", 3)
+            if result == "perfect" or result == "keep" then
+                -- 停止
                 attrRunning1 = false
-                btn.Text = originalText
+                attrRunning2 = false
+                btn.Text = "关"
                 btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
                 light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-                attrRunning2 = false
                 return
             end
-            
-            -- 第2层检测：黑名单替身
-            if ability and checkAbilityBlacklist(ability) then
-                showNotification("🔄 黑名单替身", ability .. " 在黑名单中，使用Rokakaka", 2)
-                sendItem("Rokakaka")
-                task.wait(1)
-                continue
-            end
-            
-            -- 第3层检测：只保留 Forceful 和 Legendary
-            if attr and checkThirdLayerAttribute(attr) then
-                showNotification("🎯 目标属性", "已获得 " .. attr, 3)
-                attrRunning1 = false
-                btn.Text = originalText
-                btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-                light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-                attrRunning2 = false
-                return
-            end
-            
-            sendItem("Rokakaka")
-            task.wait(1)
+            -- result == "reroll" 或 "continue" 都继续循环
         end
-        btn.Text = originalText
+        btn.Text = "关"
         btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
         light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        attrRunning1 = false
         attrRunning2 = false
     end)
 end
@@ -804,7 +815,6 @@ local function startAttrLoop2(itemName, btn, light)
         return
     end
     attrRunning2 = true
-    local originalText = btn.Text
     btn.Text = "开"
     btn.BackgroundColor3 = Color3.fromRGB(0, 120, 80)
     light.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
@@ -819,47 +829,22 @@ local function startAttrLoop2(itemName, btn, light)
             end
             if not attrRunning2 then break end
             
-            -- 第1层检测：白名单替身 + 好属性（5个）
-            local ability = getCurrentAbility()
-            local attr = getCurrentAttribute()
+            local result = checkAttributeResult()
             
-            if ability and checkAbilityWhitelist(ability) and attr and checkFirstLayerAttribute(attr) then
-                showNotification("🎯 目标组合", ability .. " + " .. attr .. "，已停止", 3)
+            if result == "perfect" or result == "keep" then
                 attrRunning2 = false
-                btn.Text = originalText
+                attrRunning1 = false
+                btn.Text = "关"
                 btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
                 light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-                attrRunning1 = false
                 return
             end
-            
-            -- 第2层检测：黑名单替身
-            if ability and checkAbilityBlacklist(ability) then
-                showNotification("🔄 黑名单替身", ability .. " 在黑名单中，使用Rokakaka", 2)
-                sendItem("Rokakaka")
-                task.wait(1)
-                continue
-            end
-            
-            -- 第3层检测：只保留 Forceful 和 Legendary
-            local attr = getCurrentAttribute()
-            if attr and checkThirdLayerAttribute(attr) then
-                showNotification("🎯 目标属性", "已获得 " .. attr, 3)
-                attrRunning2 = false
-                btn.Text = originalText
-                btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-                light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-                attrRunning1 = false
-                return
-            end
-            
-            sendItem("Rokakaka")
-            task.wait(1)
         end
-        btn.Text = originalText
+        btn.Text = "关"
         btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
         light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
         attrRunning1 = false
+        attrRunning2 = false
     end)
 end
 
@@ -959,5 +944,5 @@ closeBtn.MouseButton1Click:Connect(function()
     screenGui:Destroy()
 end)
 
-print("✅ 多功能整合脚本已加载")
+print("✅ 多功能整合脚本已加载（三层递进修复版）")
 print("📌 四个独立开关：刷副本 | Polnareff | 洗属性(普通) | 洗属性(蓄能)")
