@@ -1,4 +1,4 @@
--- ========== 多功能整合脚本（修复三层逻辑） ==========
+-- ========== 多功能整合脚本（修复三层逻辑 + Vanilla优化V3 + 容错） ==========
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
@@ -172,7 +172,6 @@ content.Parent = mainFrame
 
 -- ========== 折叠功能 ==========
 local isCollapsed = false
-
 local function toggleCollapse()
     isCollapsed = not isCollapsed
     if isCollapsed then
@@ -185,13 +184,11 @@ local function toggleCollapse()
         mainFrame.Size = UDim2.new(0, 220, 0, 300)
     end
 end
-
 collapseBtn.MouseButton1Click:Connect(toggleCollapse)
 collapseBtn.TouchTap:Connect(toggleCollapse)
 
 -- ========== 标题栏拖拽 ==========
 local dragData = {dragging = false, offset = Vector2.new()}
-
 title.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragData.dragging = true
@@ -199,13 +196,11 @@ title.InputBegan:Connect(function(input)
         input:Ignore()
     end
 end)
-
 title.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         dragData.dragging = false
     end
 end)
-
 UserInputService.InputChanged:Connect(function(input)
     if dragData.dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         mainFrame.Position = UDim2.new(0, input.Position.X - dragData.offset.X, 0, input.Position.Y - dragData.offset.Y)
@@ -265,7 +260,6 @@ local function createToggle(name, posY, color)
     return {btn = toggleBtn, light = light}
 end
 
--- ========== 创建四个开关 ==========
 local toggle1 = createToggle("刷副本(Vanilla)", 5, Color3.fromRGB(255, 200, 100))
 local toggle2 = createToggle("Polnareff自动化", 60, Color3.fromRGB(100, 200, 255))
 local toggle3 = createToggle("洗属性(普通)", 115, Color3.fromRGB(100, 255, 100))
@@ -304,16 +298,17 @@ local function getVanillaHumanoid()
     return npc:FindFirstChildOfClass("Humanoid")
 end
 
-local function teleportAboveVanilla()
+-- ========== 修改：传送到下方7格，视角朝上 ==========
+local function teleportBelowVanilla()
     local head = getVanillaHead()
     if not head then return false end
     local headPos = head.Position
-    local abovePos = headPos + Vector3.new(0, 10, 0)
+    local belowPos = headPos + Vector3.new(0, -14.1, 0)  -- 下方7格
     local char = lp.Character
     if not char then return false end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
-    hrp.CFrame = CFrame.lookAt(abovePos, headPos)
+    hrp.CFrame = CFrame.lookAt(belowPos, headPos)  -- 视角朝上看
     return true
 end
 
@@ -347,21 +342,45 @@ local function triggerAttackVanilla()
     end)
 end
 
-local function waitForVanilla()
-    while vanillaEnabled do
-        if getVanilla() then return true end
+-- ========== 带容错的等待寻找 ==========
+local function waitForVanillaWithRetry()
+    local maxAttempts = 20
+    local attempts = 0
+    
+    while vanillaEnabled and attempts < maxAttempts do
+        if getVanilla() then
+            return true
+        end
+        attempts = attempts + 1
         task.wait(0.25)
     end
+    
+    if vanillaEnabled then
+        print("⚠️ 20次未找到Vanilla，重新触发Lair...")
+        triggerLair()
+        task.wait(0.25)
+        
+        attempts = 0
+        while vanillaEnabled and attempts < maxAttempts do
+            if getVanilla() then
+                return true
+            end
+            attempts = attempts + 1
+            task.wait(0.25)
+        end
+    end
+    
     return false
 end
 
+-- ========== 修改：使用 teleportBelowVanilla ==========
 local function startVanillaFollow()
     if vanillaFollow then return end
     vanillaFollow = RunService.Heartbeat:Connect(function()
         if not vanillaEnabled then return end
         local humanoid = getVanillaHumanoid()
         if humanoid and humanoid.Health <= 0 then return end
-        teleportAboveVanilla()
+        teleportBelowVanilla()
     end)
 end
 
@@ -376,16 +395,11 @@ local function startVanillaAttack()
     if vanillaAttack then return end
     vanillaStopAttack = false
     vanillaAttack = task.spawn(function()
-        local waitTime = 5
-        while waitTime > 0 and vanillaEnabled and not vanillaStopAttack do
-            task.wait(1)
-            waitTime = waitTime - 1
-        end
         while vanillaEnabled and not vanillaStopAttack do
             local humanoid = getVanillaHumanoid()
             if humanoid and humanoid.Health > 0 then
                 triggerAttackVanilla()
-                task.wait(0.1)
+                task.wait(0.025)
             else
                 break
             end
@@ -409,7 +423,8 @@ local function startVanillaLoop()
             triggerLair()
             task.wait(0.25)
             
-            if not waitForVanilla() then
+            if not waitForVanillaWithRetry() then
+                task.wait(0.5)
                 continue
             end
             
@@ -627,36 +642,18 @@ local attrRunning1 = false
 local attrRunning2 = false
 
 local abilityBlacklist = {
-    "Crazy Diamond",
-    "The Hand",
-    "Magician's Red",
-    "Silver Chariot",
-    "Cream",
-    "White Snake",
-    "Star Platinum Stone Ocean",
-    "The Emperor",
-    "Sticky Fingers",
-    "Stone Free",
-    "Killer Queen",
-    "Hierophant Green",
-    "Aerosmith",
-    "Weather Report",
-    "Soft And Wet",
-    "Echoes Act"
+    "Crazy Diamond", "The Hand", "Magician's Red", "Silver Chariot",
+    "Cream", "White Snake", "Star Platinum Stone Ocean", "The Emperor",
+    "Sticky Fingers", "Stone Free", "Killer Queen", "Hierophant Green",
+    "Aerosmith", "Weather Report", "Soft And Wet", "Echoes Act"
 }
 
 local abilityWhitelist = {
-    "Jotaro's Star Platinum",
-    "The World OVA",
-    "Star Platinum OVA",
-    "Dio's The World",
-    "Anubis"
+    "Jotaro's Star Platinum", "The World OVA", "Star Platinum OVA",
+    "Dio's The World", "Anubis"
 }
 
--- 🔥 第1层属性：只有同时满足白名单替身+这些属性才停
 local firstLayerAttributes = {"Legendary", "Critical", "Multiply", "Thief", "Forceful"}
-
--- 🔥 第3层属性：兜底保留
 local thirdLayerAttributes = {"Forceful", "Legendary"}
 
 local function getCurrentAbility()
@@ -665,9 +662,7 @@ local function getCurrentAbility()
     local stats = data:FindFirstChild("Stats")
     if not stats then return nil end
     local ability = stats:FindFirstChild("Ability")
-    if ability then
-        return ability.Value
-    end
+    if ability then return ability.Value end
     return nil
 end
 
@@ -677,18 +672,14 @@ local function getCurrentAttribute()
     local stats = data:FindFirstChild("Stats")
     if not stats then return nil end
     local attr = stats:FindFirstChild("Attribute")
-    if attr then
-        return attr.Value
-    end
+    if attr then return attr.Value end
     return nil
 end
 
 local function checkAbilityBlacklist(ability)
     if not ability then return false end
     for _, black in ipairs(abilityBlacklist) do
-        if ability == black then
-            return true
-        end
+        if ability == black then return true end
     end
     return false
 end
@@ -696,9 +687,7 @@ end
 local function checkAbilityWhitelist(ability)
     if not ability then return false end
     for _, white in ipairs(abilityWhitelist) do
-        if ability == white then
-            return true
-        end
+        if ability == white then return true end
     end
     return false
 end
@@ -734,18 +723,15 @@ local function sendItem(itemName)
     end)
 end
 
--- 🔥 修复后的三层递进检测
 local function checkAttributeResult()
     local ability = getCurrentAbility()
     local attr = getCurrentAttribute()
     
-    -- 第1层：白名单替身 AND 好属性 → 完美，停止
     if ability and checkAbilityWhitelist(ability) and attr and checkFirstLayerAttribute(attr) then
         showNotification("🎯 完美匹配(第1层)", ability .. " + " .. attr .. "，已停止", 4)
         return "perfect"
     end
     
-    -- 第2层：没通过第1层，检查是否黑名单替身 → 吃Roka跳过
     if ability and checkAbilityBlacklist(ability) then
         showNotification("🔄 黑名单替身(第2层)", ability .. "，使用Rokakaka跳过", 2)
         sendItem("Rokakaka")
@@ -753,13 +739,11 @@ local function checkAttributeResult()
         return "reroll"
     end
     
-    -- 第3层：兜底，属性是 Forceful 或 Legendary → 保留停止
     if attr and checkThirdLayerAttribute(attr) then
         showNotification("🎯 兜底保留(第3层)", "属性: " .. attr .. "，已停止", 3)
         return "keep"
     end
     
-    -- 都不满足 → 吃Roka继续
     showNotification("🔄 不满足条件", "当前: " .. (ability or "?") .. " / " .. (attr or "?"), 1)
     sendItem("Rokakaka")
     task.wait(1)
@@ -779,19 +763,14 @@ local function startAttrLoop(itemName, btn, light)
     task.spawn(function()
         while attrRunning1 do
             sendItem(itemName)
-            
-            -- 等5秒让箭生效
             for i = 5, 1, -1 do
                 if not attrRunning1 then break end
                 task.wait(1)
             end
             if not attrRunning1 then break end
             
-            -- 三层检测
             local result = checkAttributeResult()
-            
             if result == "perfect" or result == "keep" then
-                -- 停止
                 attrRunning1 = false
                 attrRunning2 = false
                 btn.Text = "关"
@@ -799,7 +778,6 @@ local function startAttrLoop(itemName, btn, light)
                 light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
                 return
             end
-            -- result == "reroll" 或 "continue" 都继续循环
         end
         btn.Text = "关"
         btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
@@ -822,7 +800,6 @@ local function startAttrLoop2(itemName, btn, light)
     task.spawn(function()
         while attrRunning2 do
             sendItem(itemName)
-            
             for i = 5, 1, -1 do
                 if not attrRunning2 then break end
                 task.wait(1)
@@ -830,7 +807,6 @@ local function startAttrLoop2(itemName, btn, light)
             if not attrRunning2 then break end
             
             local result = checkAttributeResult()
-            
             if result == "perfect" or result == "keep" then
                 attrRunning2 = false
                 attrRunning1 = false
@@ -935,14 +911,10 @@ closeBtn.MouseButton1Click:Connect(function()
         polnareffEnabled = false
         stopPolnareffAll()
     end
-    if attrRunning1 then
-        attrRunning1 = false
-    end
-    if attrRunning2 then
-        attrRunning2 = false
-    end
+    if attrRunning1 then attrRunning1 = false end
+    if attrRunning2 then attrRunning2 = false end
     screenGui:Destroy()
 end)
 
-print("✅ 多功能整合脚本已加载（三层递进修复版）")
-print("📌 四个独立开关：刷副本 | Polnareff | 洗属性(普通) | 洗属性(蓄能)")
+print("✅ 多功能整合脚本已加载（Vanilla优化V3 + 容错 + 下方传送）")
+print("📌 传送位置：Boss下方7格 | 视角朝上 | 攻击间隔0.025 | 开局等1秒 | 容错20次重试")
