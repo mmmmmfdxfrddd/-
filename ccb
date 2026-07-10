@@ -1,4 +1,4 @@
--- ========== 多功能整合脚本（修复三层逻辑 + Vanilla优化V3 + 容错） ==========
+-- ========== 多功能整合脚本 ==========
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
@@ -103,8 +103,8 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = lp:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 220, 0, 300)
-mainFrame.Position = UDim2.new(0.02, 0, 0.15, 0)
+mainFrame.Size = UDim2.new(0, 220, 0, 350)
+mainFrame.Position = UDim2.new(0.02, 0, 0.12, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
 mainFrame.BackgroundTransparency = 0.05
 mainFrame.BorderSizePixel = 0
@@ -136,6 +136,7 @@ titleText.Font = Enum.Font.GothamBold
 titleText.TextXAlignment = Enum.TextXAlignment.Left
 titleText.Parent = title
 
+-- 折叠按钮（修复：直接点击触发，无需长按）
 local collapseBtn = Instance.new("TextButton")
 collapseBtn.Size = UDim2.new(0, 28, 0, 28)
 collapseBtn.Position = UDim2.new(1, -65, 0.5, -14)
@@ -170,7 +171,7 @@ content.Position = UDim2.new(0, 0, 0, 32)
 content.BackgroundTransparency = 1
 content.Parent = mainFrame
 
--- ========== 折叠功能 ==========
+-- ========== 折叠功能（直接点击） ==========
 local isCollapsed = false
 local function toggleCollapse()
     isCollapsed = not isCollapsed
@@ -181,11 +182,10 @@ local function toggleCollapse()
     else
         content.Visible = true
         collapseBtn.Text = "−"
-        mainFrame.Size = UDim2.new(0, 220, 0, 300)
+        mainFrame.Size = UDim2.new(0, 220, 0, 350)
     end
 end
 collapseBtn.MouseButton1Click:Connect(toggleCollapse)
-collapseBtn.TouchTap:Connect(toggleCollapse)
 
 -- ========== 标题栏拖拽 ==========
 local dragData = {dragging = false, offset = Vector2.new()}
@@ -264,6 +264,7 @@ local toggle1 = createToggle("刷副本(Vanilla)", 5, Color3.fromRGB(255, 200, 1
 local toggle2 = createToggle("Polnareff自动化", 60, Color3.fromRGB(100, 200, 255))
 local toggle3 = createToggle("洗属性(普通)", 115, Color3.fromRGB(100, 255, 100))
 local toggle4 = createToggle("洗属性(蓄能)", 170, Color3.fromRGB(255, 150, 50))
+local toggle5 = createToggle("抽面具(Kars Mask)", 225, Color3.fromRGB(255, 100, 200))
 
 -- ==================== 脚本1：刷副本(Vanilla) ====================
 local vanillaEnabled = false
@@ -298,17 +299,16 @@ local function getVanillaHumanoid()
     return npc:FindFirstChildOfClass("Humanoid")
 end
 
--- ========== 修改：传送到下方7格，视角朝上 ==========
 local function teleportBelowVanilla()
     local head = getVanillaHead()
     if not head then return false end
     local headPos = head.Position
-    local belowPos = headPos + Vector3.new(0, -14.1, 0)  -- 下方7格
+    local belowPos = headPos + Vector3.new(0, -13.7, 0)
     local char = lp.Character
     if not char then return false end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
-    hrp.CFrame = CFrame.lookAt(belowPos, headPos)  -- 视角朝上看
+    hrp.CFrame = CFrame.lookAt(belowPos, headPos)
     return true
 end
 
@@ -342,7 +342,6 @@ local function triggerAttackVanilla()
     end)
 end
 
--- ========== 带容错的等待寻找 ==========
 local function waitForVanillaWithRetry()
     local maxAttempts = 20
     local attempts = 0
@@ -356,7 +355,16 @@ local function waitForVanillaWithRetry()
     end
     
     if vanillaEnabled then
-        print("⚠️ 20次未找到Vanilla，重新触发Lair...")
+        local char = lp.Character
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.CFrame = CFrame.new(-679.340, -115.262, -809.080)
+            end
+        end
+        
+        task.wait(1)
+        
         triggerLair()
         task.wait(0.25)
         
@@ -373,7 +381,6 @@ local function waitForVanillaWithRetry()
     return false
 end
 
--- ========== 修改：使用 teleportBelowVanilla ==========
 local function startVanillaFollow()
     if vanillaFollow then return end
     vanillaFollow = RunService.Heartbeat:Connect(function()
@@ -832,6 +839,65 @@ local function stopAttrLoop(btn, light)
     light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 end
 
+-- ==================== 脚本4：抽面具 ====================
+local maskRunning = false
+local maskLoop = nil
+
+local function sendMask()
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Library")
+        if remotes then
+            remotes = remotes:FindFirstChild("Remotes")
+            if remotes then
+                local send = remotes:FindFirstChild("Send")
+                if send then
+                    send:FireServer("Item", "Kars Mask")
+                end
+            end
+        end
+    end)
+end
+
+local function startMaskLoop()
+    if maskLoop then return end
+    maskLoop = task.spawn(function()
+        while maskRunning do
+            sendMask()
+            
+            for i = 2, 1, -1 do
+                if not maskRunning then break end
+                task.wait(1)
+            end
+            if not maskRunning then break end
+            
+            local attr = getCurrentAttribute()
+            if attr and checkThirdLayerAttribute(attr) then
+                showNotification("🎯 目标面具属性", "已获得 " .. attr, 3)
+                maskRunning = false
+                toggle5.btn.Text = "关"
+                toggle5.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+                toggle5.light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+                return
+            end
+        end
+        maskLoop = nil
+        toggle5.btn.Text = "关"
+        toggle5.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        toggle5.light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    end)
+end
+
+local function stopMaskLoop()
+    maskRunning = false
+    if maskLoop then
+        task.cancel(maskLoop)
+        maskLoop = nil
+    end
+    toggle5.btn.Text = "关"
+    toggle5.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    toggle5.light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+end
+
 -- ==================== 开关绑定 ====================
 toggle1.btn.MouseButton1Click:Connect(function()
     if vanillaEnabled then
@@ -901,6 +967,21 @@ toggle4.btn.MouseButton1Click:Connect(function()
     end
 end)
 
+toggle5.btn.MouseButton1Click:Connect(function()
+    if maskRunning then
+        maskRunning = false
+        stopMaskLoop()
+        showNotification("❌ 抽面具", "已关闭", 2)
+    else
+        maskRunning = true
+        toggle5.btn.Text = "开"
+        toggle5.btn.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
+        toggle5.light.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        startMaskLoop()
+        showNotification("✅ 抽面具", "已开启（目标: Forceful/Legendary）", 2)
+    end
+end)
+
 closeBtn.MouseButton1Click:Connect(function()
     if vanillaEnabled then
         vanillaEnabled = false
@@ -913,8 +994,11 @@ closeBtn.MouseButton1Click:Connect(function()
     end
     if attrRunning1 then attrRunning1 = false end
     if attrRunning2 then attrRunning2 = false end
+    if maskRunning then
+        maskRunning = false
+        stopMaskLoop()
+    end
     screenGui:Destroy()
 end)
 
-print("✅ 多功能整合脚本已加载（Vanilla优化V3 + 容错 + 下方传送）")
-print("📌 传送位置：Boss下方7格 | 视角朝上 | 攻击间隔0.025 | 开局等1秒 | 容错20次重试")
+showNotification("✅ 多功能整合", "已加载（含抽面具）", 2)
