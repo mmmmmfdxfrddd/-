@@ -103,8 +103,8 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = lp:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 220, 0, 350)
-mainFrame.Position = UDim2.new(0.02, 0, 0.12, 0)
+mainFrame.Size = UDim2.new(0, 220, 0, 400)
+mainFrame.Position = UDim2.new(0.02, 0, 0.1, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
 mainFrame.BackgroundTransparency = 0.05
 mainFrame.BorderSizePixel = 0
@@ -171,7 +171,7 @@ content.Position = UDim2.new(0, 0, 0, 32)
 content.BackgroundTransparency = 1
 content.Parent = mainFrame
 
--- ========== 折叠功能（直接点击） ==========
+-- ========== 折叠功能 ==========
 local isCollapsed = false
 local function toggleCollapse()
     isCollapsed = not isCollapsed
@@ -182,7 +182,7 @@ local function toggleCollapse()
     else
         content.Visible = true
         collapseBtn.Text = "−"
-        mainFrame.Size = UDim2.new(0, 220, 0, 350)
+        mainFrame.Size = UDim2.new(0, 220, 0, 400)
     end
 end
 collapseBtn.MouseButton1Click:Connect(toggleCollapse)
@@ -260,11 +260,85 @@ local function createToggle(name, posY, color)
     return {btn = toggleBtn, light = light}
 end
 
-local toggle1 = createToggle("刷副本(Vanilla)", 5, Color3.fromRGB(255, 200, 100))
-local toggle2 = createToggle("Polnareff自动化", 60, Color3.fromRGB(100, 200, 255))
-local toggle3 = createToggle("洗属性(普通)", 115, Color3.fromRGB(100, 255, 100))
-local toggle4 = createToggle("洗属性(蓄能)", 170, Color3.fromRGB(255, 150, 50))
-local toggle5 = createToggle("抽面具(Kars Mask)", 225, Color3.fromRGB(255, 100, 200))
+-- ========== 高度控制 ==========
+local heightValue = 13.7
+local directionIsUp = false
+
+local controlFrame = Instance.new("Frame")
+controlFrame.Size = UDim2.new(1, -20, 0, 32)
+controlFrame.Position = UDim2.new(0, 10, 0, 5)
+controlFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
+controlFrame.BorderSizePixel = 0
+controlFrame.Parent = content
+
+local controlCorner = Instance.new("UICorner")
+controlCorner.CornerRadius = UDim.new(0, 6)
+controlCorner.Parent = controlFrame
+
+local heightLabel = Instance.new("TextLabel")
+heightLabel.Size = UDim2.new(0, 45, 1, 0)
+heightLabel.Position = UDim2.new(0, 8, 0, 0)
+heightLabel.BackgroundTransparency = 1
+heightLabel.Text = "高度"
+heightLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+heightLabel.TextSize = 13
+heightLabel.Font = Enum.Font.GothamBold
+heightLabel.TextXAlignment = Enum.TextXAlignment.Left
+heightLabel.Parent = controlFrame
+
+local heightInput = Instance.new("TextBox")
+heightInput.Size = UDim2.new(0, 50, 1, -8)
+heightInput.Position = UDim2.new(0, 55, 0, 4)
+heightInput.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+heightInput.Text = tostring(heightValue)
+heightInput.TextColor3 = Color3.new(1, 1, 1)
+heightInput.TextSize = 13
+heightInput.Font = Enum.Font.GothamBold
+heightInput.TextXAlignment = Enum.TextXAlignment.Center
+heightInput.Parent = controlFrame
+local inputCorner = Instance.new("UICorner")
+inputCorner.CornerRadius = UDim.new(0, 4)
+inputCorner.Parent = heightInput
+
+local dirBtn = Instance.new("TextButton")
+dirBtn.Size = UDim2.new(0, 40, 1, -8)
+dirBtn.Position = UDim2.new(1, -48, 0, 4)
+dirBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+dirBtn.Text = "下"
+dirBtn.TextColor3 = Color3.new(1, 1, 1)
+dirBtn.TextSize = 13
+dirBtn.Font = Enum.Font.GothamBold
+dirBtn.AutoButtonColor = true
+dirBtn.Parent = controlFrame
+local dirCorner = Instance.new("UICorner")
+dirCorner.CornerRadius = UDim.new(0, 4)
+dirCorner.Parent = dirBtn
+
+dirBtn.MouseButton1Click:Connect(function()
+    directionIsUp = not directionIsUp
+    if directionIsUp then
+        dirBtn.Text = "上"
+        dirBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 80)
+    else
+        dirBtn.Text = "下"
+        dirBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    end
+end)
+
+heightInput.FocusLost:Connect(function()
+    local num = tonumber(heightInput.Text)
+    if num then
+        heightValue = math.clamp(num, -100, 100)
+    end
+    heightInput.Text = string.format("%.1f", heightValue)
+end)
+
+-- 5个开关
+local toggle1 = createToggle("刷副本(Vanilla)", 42, Color3.fromRGB(255, 200, 100))
+local toggle2 = createToggle("洗属性(普通)", 97, Color3.fromRGB(100, 255, 100))
+local toggle3 = createToggle("洗属性(蓄能)", 152, Color3.fromRGB(255, 150, 50))
+local toggle4 = createToggle("抽面具(Kars Mask)", 207, Color3.fromRGB(255, 100, 200))
+local toggle5 = createToggle("自动启动替身", 262, Color3.fromRGB(255, 200, 50))
 
 -- ==================== 脚本1：刷副本(Vanilla) ====================
 local vanillaEnabled = false
@@ -299,16 +373,20 @@ local function getVanillaHumanoid()
     return npc:FindFirstChildOfClass("Humanoid")
 end
 
-local function teleportBelowVanilla()
+local function teleportToVanilla()
     local head = getVanillaHead()
     if not head then return false end
-    local headPos = head.Position
-    local belowPos = headPos + Vector3.new(0, -13.7, 0)
+    
     local char = lp.Character
     if not char then return false end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return false end
-    hrp.CFrame = CFrame.lookAt(belowPos, headPos)
+    
+    local headPos = head.Position
+    local offset = (directionIsUp and 1 or -1) * heightValue
+    local targetPos = headPos + Vector3.new(0, offset, 0)
+    
+    hrp.CFrame = CFrame.lookAt(targetPos, headPos)
     return true
 end
 
@@ -387,7 +465,7 @@ local function startVanillaFollow()
         if not vanillaEnabled then return end
         local humanoid = getVanillaHumanoid()
         if humanoid and humanoid.Health <= 0 then return end
-        teleportBelowVanilla()
+        teleportToVanilla()
     end)
 end
 
@@ -467,184 +545,7 @@ local function stopVanillaLoop()
     end
 end
 
--- ==================== 脚本2：Polnareff自动化 ====================
-local polnareffEnabled = false
-local polnareffFollow = nil
-local polnareffAttack = nil
-local polnareffRadius = nil
-local polnareffQuest = nil
-
-local function getPolnareff()
-    local world = Workspace:FindFirstChild("World")
-    if not world then return nil end
-    local living = world:FindFirstChild("Living")
-    if not living then return nil end
-    return living:FindFirstChild("Polnareff")
-end
-
-local function getPolnareffUpperTorso()
-    local npc = getPolnareff()
-    if not npc then return nil end
-    return npc:FindFirstChild("UpperTorso")
-end
-
-local function getPolnareffHumanoid()
-    local npc = getPolnareff()
-    if not npc then return nil end
-    return npc:FindFirstChildOfClass("Humanoid")
-end
-
-local function teleportAbovePolnareff()
-    local upperTorso = getPolnareffUpperTorso()
-    if not upperTorso then return false end
-    local char = lp.Character
-    if not char then return false end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-    local npcPos = upperTorso.Position
-    local abovePos = npcPos + Vector3.new(0, 5, 0)
-    hrp.CFrame = CFrame.lookAt(abovePos, npcPos)
-    return true
-end
-
-local function triggerAttackPolnareff()
-    pcall(function()
-        local remotes = ReplicatedStorage:FindFirstChild("Library")
-        if remotes then
-            remotes = remotes:FindFirstChild("Remotes")
-            if remotes then
-                local input = remotes:FindFirstChild("Input")
-                if input then
-                    input:InvokeServer(Enum.UserInputType.MouseButton1, Enum.UserInputState.Begin)
-                end
-            end
-        end
-    end)
-end
-
-local function setPolnareffHealthZero()
-    local humanoid = getPolnareffHumanoid()
-    if humanoid then
-        pcall(function() humanoid.Health = 0 end)
-    end
-end
-
-local function startPolnareffAttack()
-    if polnareffAttack then return end
-    polnareffAttack = task.spawn(function()
-        while polnareffEnabled do
-            local humanoid = getPolnareffHumanoid()
-            if humanoid and humanoid.Health > 0 then
-                triggerAttackPolnareff()
-                task.wait(0.05)
-                setPolnareffHealthZero()
-            end
-            task.wait(0.2)
-        end
-        polnareffAttack = nil
-    end)
-end
-
-local function stopPolnareffAttack()
-    if polnareffAttack then
-        task.cancel(polnareffAttack)
-        polnareffAttack = nil
-    end
-end
-
-local function startPolnareffFollow()
-    if polnareffFollow then return end
-    polnareffFollow = RunService.Heartbeat:Connect(function()
-        if polnareffEnabled then
-            teleportAbovePolnareff()
-        end
-    end)
-end
-
-local function stopPolnareffFollow()
-    if polnareffFollow then
-        polnareffFollow:Disconnect()
-        polnareffFollow = nil
-    end
-end
-
-local function expandRadius()
-    pcall(function()
-        sethiddenproperty(lp, "SimulationRadius", 112412400000)
-        sethiddenproperty(lp, "MaxSimulationRadius", 112412400000)
-    end)
-end
-
-local function startPolnareffRadius()
-    if polnareffRadius then return end
-    polnareffRadius = task.spawn(function()
-        while polnareffEnabled do
-            expandRadius()
-            task.wait(0.5)
-        end
-        polnareffRadius = nil
-    end)
-end
-
-local function stopPolnareffRadius()
-    if polnareffRadius then
-        task.cancel(polnareffRadius)
-        polnareffRadius = nil
-    end
-end
-
-local function triggerQuest()
-    pcall(function()
-        local remotes = ReplicatedStorage:FindFirstChild("Library")
-        if remotes then
-            remotes = remotes:FindFirstChild("Remotes")
-            if remotes then
-                local quest = remotes:FindFirstChild("Quest")
-                if quest then
-                    quest:InvokeServer("Response", "admpn")
-                    task.wait(0.1)
-                    quest:InvokeServer("Start", "admpn")
-                end
-            end
-        end
-    end)
-end
-
-local function startPolnareffQuest()
-    if polnareffQuest then return end
-    polnareffQuest = task.spawn(function()
-        while polnareffEnabled do
-            triggerQuest()
-            task.wait(0.5)
-        end
-        polnareffQuest = nil
-    end)
-end
-
-local function stopPolnareffQuest()
-    if polnareffQuest then
-        task.cancel(polnareffQuest)
-        polnareffQuest = nil
-    end
-end
-
-local function startPolnareffAll()
-    disablePhysics()
-    startPolnareffFollow()
-    startPolnareffAttack()
-    startPolnareffRadius()
-    startPolnareffQuest()
-end
-
-local function stopPolnareffAll()
-    restorePhysics()
-    stopPolnareffFollow()
-    stopPolnareffAttack()
-    stopPolnareffRadius()
-    stopPolnareffQuest()
-end
-
--- ==================== 脚本3：自动洗属性（三层递进修复版） ====================
+-- ==================== 脚本2：自动洗属性 ====================
 local attrRunning1 = false
 local attrRunning2 = false
 
@@ -839,7 +740,7 @@ local function stopAttrLoop(btn, light)
     light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
 end
 
--- ==================== 脚本4：抽面具 ====================
+-- ==================== 脚本3：抽面具 ====================
 local maskRunning = false
 local maskLoop = nil
 
@@ -874,16 +775,16 @@ local function startMaskLoop()
             if attr and checkThirdLayerAttribute(attr) then
                 showNotification("🎯 目标面具属性", "已获得 " .. attr, 3)
                 maskRunning = false
-                toggle5.btn.Text = "关"
-                toggle5.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-                toggle5.light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+                toggle4.btn.Text = "关"
+                toggle4.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+                toggle4.light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
                 return
             end
         end
         maskLoop = nil
-        toggle5.btn.Text = "关"
-        toggle5.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-        toggle5.light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        toggle4.btn.Text = "关"
+        toggle4.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        toggle4.light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
     end)
 end
 
@@ -893,9 +794,59 @@ local function stopMaskLoop()
         task.cancel(maskLoop)
         maskLoop = nil
     end
-    toggle5.btn.Text = "关"
-    toggle5.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-    toggle5.light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    toggle4.btn.Text = "关"
+    toggle4.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    toggle4.light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+end
+
+-- ==================== 脚本4：自动启动替身 ====================
+local summonMonitorEnabled = false
+local summonMonitorTask = nil
+
+local function findSummonInLocalPlayer()
+    local char = lp.Character
+    if not char then return nil end
+    return char:FindFirstChild("Kars") or char:FindFirstChild("Stand")
+end
+
+local function triggerSummonQSkill()
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Library")
+        if remotes then
+            remotes = remotes:FindFirstChild("Remotes")
+            if remotes then
+                local input = remotes:FindFirstChild("Input")
+                if input then
+                    input:InvokeServer(Enum.KeyCode.Q, Enum.UserInputState.Begin)
+                end
+            end
+        end
+    end)
+end
+
+local function startSummonMonitor()
+    if summonMonitorTask then return end
+    
+    summonMonitorTask = task.spawn(function()
+        while summonMonitorEnabled do
+            local found = findSummonInLocalPlayer()
+            
+            if not found then
+                triggerSummonQSkill()
+            end
+            
+            task.wait(0.5)
+        end
+        summonMonitorTask = nil
+    end)
+end
+
+local function stopSummonMonitor()
+    summonMonitorEnabled = false
+    if summonMonitorTask then
+        task.cancel(summonMonitorTask)
+        summonMonitorTask = nil
+    end
 end
 
 -- ==================== 开关绑定 ====================
@@ -932,53 +883,53 @@ toggle1.btn.MouseButton1Click:Connect(function()
 end)
 
 toggle2.btn.MouseButton1Click:Connect(function()
-    if polnareffEnabled then
-        polnareffEnabled = false
-        stopPolnareffAll()
-        toggle2.btn.Text = "关"
-        toggle2.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-        toggle2.light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-        showNotification("❌ Polnareff", "已关闭", 2)
+    if attrRunning1 then
+        stopAttrLoop(toggle2.btn, toggle2.light)
+        showNotification("❌ 洗属性(普通)", "已关闭", 2)
     else
-        polnareffEnabled = true
-        toggle2.btn.Text = "开"
-        toggle2.btn.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
-        toggle2.light.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-        startPolnareffAll()
-        showNotification("✅ Polnareff", "已开启（物理全关）", 2)
+        startAttrLoop("Stand Arrow", toggle2.btn, toggle2.light)
     end
 end)
 
 toggle3.btn.MouseButton1Click:Connect(function()
-    if attrRunning1 then
+    if attrRunning2 then
         stopAttrLoop(toggle3.btn, toggle3.light)
-        showNotification("❌ 洗属性(普通)", "已关闭", 2)
+        showNotification("❌ 洗属性(蓄能)", "已关闭", 2)
     else
-        startAttrLoop("Stand Arrow", toggle3.btn, toggle3.light)
+        startAttrLoop2("Unusual Arrow", toggle3.btn, toggle3.light)
     end
 end)
 
 toggle4.btn.MouseButton1Click:Connect(function()
-    if attrRunning2 then
-        stopAttrLoop(toggle4.btn, toggle4.light)
-        showNotification("❌ 洗属性(蓄能)", "已关闭", 2)
-    else
-        startAttrLoop2("Unusual Arrow", toggle4.btn, toggle4.light)
-    end
-end)
-
-toggle5.btn.MouseButton1Click:Connect(function()
     if maskRunning then
         maskRunning = false
         stopMaskLoop()
         showNotification("❌ 抽面具", "已关闭", 2)
     else
         maskRunning = true
+        toggle4.btn.Text = "开"
+        toggle4.btn.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
+        toggle4.light.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        startMaskLoop()
+        showNotification("✅ 抽面具", "已开启（目标: Forceful/Legendary）", 2)
+    end
+end)
+
+toggle5.btn.MouseButton1Click:Connect(function()
+    if summonMonitorEnabled then
+        summonMonitorEnabled = false
+        stopSummonMonitor()
+        toggle5.btn.Text = "关"
+        toggle5.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        toggle5.light.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        showNotification("❌ 自动启动替身", "已关闭", 2)
+    else
+        summonMonitorEnabled = true
         toggle5.btn.Text = "开"
         toggle5.btn.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
         toggle5.light.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-        startMaskLoop()
-        showNotification("✅ 抽面具", "已开启（目标: Forceful/Legendary）", 2)
+        startSummonMonitor()
+        showNotification("✅ 自动启动替身", "已开启（检测Kars/Stand）", 2)
     end
 end)
 
@@ -988,17 +939,17 @@ closeBtn.MouseButton1Click:Connect(function()
         stopVanillaLoop()
         restorePhysics()
     end
-    if polnareffEnabled then
-        polnareffEnabled = false
-        stopPolnareffAll()
-    end
     if attrRunning1 then attrRunning1 = false end
     if attrRunning2 then attrRunning2 = false end
     if maskRunning then
         maskRunning = false
         stopMaskLoop()
     end
+    if summonMonitorEnabled then
+        summonMonitorEnabled = false
+        stopSummonMonitor()
+    end
     screenGui:Destroy()
 end)
 
-showNotification("✅ 多功能整合", "已加载（含抽面具）", 2)
+showNotification("✅ 多功能整合", "已加载（含自动启动替身）", 2)
