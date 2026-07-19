@@ -1,0 +1,358 @@
+-- ========== Dio Over Heaven 自动化脚本 ==========
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local lp = Players.LocalPlayer
+
+local isEnabled = false
+local mainLoopTask = nil
+local attackTask = nil
+local isAttacking = false
+local stopAttack = false
+local followTask = nil
+local isFollowing = false
+
+-- ========== 物理属性保存 ==========
+local savedPhysics = {
+    walkSpeed = nil,
+    jumpPower = nil,
+    autoRotate = nil,
+    platformStand = nil,
+    velocity = nil,
+    rotationalVelocity = nil,
+    assemblyLinearVelocity = nil,
+    assemblyAngularVelocity = nil
+}
+
+-- ========== 获取Dio ==========
+local function getDio()
+    local living = Workspace:FindFirstChild("Living")
+    if not living then return nil end
+    return living:FindFirstChild("Dio Over Heaven")
+end
+
+-- ========== 获取Dio的Head位置 ==========
+local function getDioHead()
+    local dio = getDio()
+    if not dio then return nil end
+    return dio:FindFirstChild("Head")
+end
+
+-- ========== 获取Dio的Humanoid ==========
+local function getDioHumanoid()
+    local dio = getDio()
+    if not dio then return nil end
+    return dio:FindFirstChildOfClass("Humanoid")
+end
+
+-- ========== 传送玩家到Dio头部上方10格 ==========
+local function teleportAboveDio()
+    local head = getDioHead()
+    if not head then return false end
+    
+    local headPos = head.Position
+    local abovePos = headPos + Vector3.new(0, 10, 0)
+    
+    local char = lp.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    
+    hrp.CFrame = CFrame.lookAt(abovePos, headPos)
+    
+    return true
+end
+
+-- ========== 获取Dio头部上方10格位置 ==========
+local function getAboveDioPosition()
+    local head = getDioHead()
+    if not head then return nil end
+    return head.Position + Vector3.new(0, 10, 0)
+end
+
+-- ========== 传送玩家到指定位置（清除所有物理速度） ==========
+local function teleportPlayer(position)
+    local char = lp.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    pcall(function()
+        hrp.Velocity = Vector3.new(0, 0, 0)
+        hrp.RotVelocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    end)
+    
+    hrp.CFrame = CFrame.new(position)
+    
+    task.wait()
+    pcall(function()
+        hrp.Velocity = Vector3.new(0, 0, 0)
+        hrp.RotVelocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    end)
+end
+
+-- ========== 触发M1 ==========
+local function fireM1()
+    pcall(function()
+        local char = lp.Character
+        if not char then return end
+        local standEvents = char:FindFirstChild("StandEvents")
+        if not standEvents then return end
+        local m1 = standEvents:FindFirstChild("M1")
+        if m1 and m1:IsA("RemoteEvent") then
+            m1:FireServer()
+        end
+    end)
+end
+
+-- ========== 每帧传送跟随 ==========
+local function startFollowLoop()
+    if followTask then return end
+    isFollowing = true
+    
+    followTask = RunService.Heartbeat:Connect(function()
+        if not isEnabled then return end
+        
+        local humanoid = getDioHumanoid()
+        if humanoid and humanoid.Health <= 0 then
+            return
+        end
+        
+        teleportAboveDio()
+    end)
+end
+
+local function stopFollowLoop()
+    isFollowing = false
+    if followTask then
+        followTask:Disconnect()
+        followTask = nil
+    end
+end
+
+-- ========== 关闭所有物理属性 ==========
+local function disablePhysics()
+    local char = lp.Character
+    if not char then return end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    
+    if humanoid then
+        savedPhysics.walkSpeed = humanoid.WalkSpeed
+        savedPhysics.jumpPower = humanoid.JumpPower
+        savedPhysics.autoRotate = humanoid.AutoRotate
+        savedPhysics.platformStand = humanoid.PlatformStand
+        
+        humanoid.WalkSpeed = 0
+        humanoid.JumpPower = 0
+        humanoid.AutoRotate = false
+        humanoid.PlatformStand = true
+    end
+    
+    if hrp then
+        savedPhysics.velocity = hrp.Velocity
+        savedPhysics.rotationalVelocity = hrp.RotVelocity
+        savedPhysics.assemblyLinearVelocity = hrp.AssemblyLinearVelocity
+        savedPhysics.assemblyAngularVelocity = hrp.AssemblyAngularVelocity
+        
+        hrp.Velocity = Vector3.new(0, 0, 0)
+        hrp.RotVelocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    end
+    
+    print("✅ 所有物理属性已禁用")
+end
+
+-- ========== 恢复物理属性 ==========
+local function restorePhysics()
+    local char = lp.Character
+    if not char then return end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    
+    if humanoid then
+        if savedPhysics.walkSpeed ~= nil then
+            humanoid.WalkSpeed = savedPhysics.walkSpeed
+        end
+        if savedPhysics.jumpPower ~= nil then
+            humanoid.JumpPower = savedPhysics.jumpPower
+        end
+        if savedPhysics.autoRotate ~= nil then
+            humanoid.AutoRotate = savedPhysics.autoRotate
+        end
+        if savedPhysics.platformStand ~= nil then
+            humanoid.PlatformStand = savedPhysics.platformStand
+        end
+    end
+    
+    if hrp then
+        if savedPhysics.velocity ~= nil then
+            hrp.Velocity = savedPhysics.velocity
+        end
+        if savedPhysics.rotationalVelocity ~= nil then
+            hrp.RotVelocity = savedPhysics.rotationalVelocity
+        end
+        if savedPhysics.assemblyLinearVelocity ~= nil then
+            hrp.AssemblyLinearVelocity = savedPhysics.assemblyLinearVelocity
+        end
+        if savedPhysics.assemblyAngularVelocity ~= nil then
+            hrp.AssemblyAngularVelocity = savedPhysics.assemblyAngularVelocity
+        end
+    end
+    
+    print("✅ 物理属性已恢复")
+end
+
+-- ========== 攻击循环 ==========
+local function startAttackLoop()
+    if attackTask then return end
+    stopAttack = false
+    isAttacking = true
+    
+    attackTask = task.spawn(function()
+        while isEnabled and not stopAttack do
+            local humanoid = getDioHumanoid()
+            if humanoid and humanoid.Health > 0 then
+                fireM1()
+                task.wait(0.025)
+            else
+                break
+            end
+        end
+        isAttacking = false
+        attackTask = nil
+    end)
+end
+
+local function stopAttackLoop()
+    stopAttack = true
+    isAttacking = false
+    if attackTask then
+        task.cancel(attackTask)
+        attackTask = nil
+    end
+end
+
+-- ========== 传送往返 ==========
+local function teleportLoop()
+    local targetPos = Vector3.new(280.951, 1027.578, 48.825)
+    local abovePos = getAboveDioPosition()
+    if not abovePos then
+        return
+    end
+    
+    teleportPlayer(targetPos)
+    task.wait(0.25)
+    
+    teleportPlayer(abovePos)
+    task.wait(0.25)
+end
+
+-- ========== 主循环 ==========
+local function mainLoop()
+    while isEnabled do
+        local dio = getDio()
+        if not dio then
+            task.wait(1)
+            continue
+        end
+        
+        startFollowLoop()
+        
+        task.wait(0.025)
+        
+        startAttackLoop()
+        
+        while isEnabled do
+            local humanoid = getDioHumanoid()
+            if not humanoid or humanoid.Health <= 0 then
+                break
+            end
+            task.wait(0.1)
+        end
+        
+        stopAttackLoop()
+        stopFollowLoop()
+        
+        teleportLoop()
+        
+        task.wait(0.1)
+    end
+end
+
+-- ========== UI开关 ==========
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "DioAutoUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = lp:WaitForChild("PlayerGui")
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 70, 0, 70)
+toggleBtn.Position = UDim2.new(0.08, 0, 0.5, -35)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+toggleBtn.Text = "启动"
+toggleBtn.TextColor3 = Color3.new(1, 1, 1)
+toggleBtn.TextSize = 16
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.BorderSizePixel = 0
+toggleBtn.Parent = screenGui
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(1, 0)
+btnCorner.Parent = toggleBtn
+
+local statusLight = Instance.new("Frame")
+statusLight.Size = UDim2.new(0, 10, 0, 10)
+statusLight.Position = UDim2.new(0.5, -5, 0, 5)
+statusLight.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+statusLight.BorderSizePixel = 0
+statusLight.Parent = toggleBtn
+
+local lightCorner = Instance.new("UICorner")
+lightCorner.CornerRadius = UDim.new(0, 5)
+lightCorner.Parent = statusLight
+
+-- ========== 开关逻辑 ==========
+local function toggleScript()
+    isEnabled = not isEnabled
+    if isEnabled then
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 80)
+        toggleBtn.Text = "运行中"
+        statusLight.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        
+        disablePhysics()
+        
+        if mainLoopTask then
+            task.cancel(mainLoopTask)
+            mainLoopTask = nil
+        end
+        mainLoopTask = task.spawn(mainLoop)
+        print("✅ Dio Over Heaven 自动化已开启")
+    else
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        toggleBtn.Text = "启动"
+        statusLight.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        
+        restorePhysics()
+        
+        stopAttackLoop()
+        stopFollowLoop()
+        if mainLoopTask then
+            task.cancel(mainLoopTask)
+            mainLoopTask = nil
+        end
+        print("❌ Dio Over Heaven 自动化已关闭")
+    end
+end
+
+toggleBtn.MouseButton1Click:Connect(toggleScript)
+toggleBtn.TouchTap:Connect(toggleScript)
+
+print("✅ Dio Over Heaven 自动化脚本已加载")
