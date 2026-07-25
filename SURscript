@@ -1,0 +1,920 @@
+--[[
+  SUR抽箭汉化脚本
+  说明：200级地牢副本、自动抽替身、设置、保留特殊替身加属性四个页面。
+  地牢：清理Living→传送→等0.5秒→接任务(每0.25秒)→等1秒→秒杀循环。死亡自动等待复活后从头开始。
+  保留功能：替身单选必选，属性多选可选。匹配即存入槽位。共6组。
+  设置：反挂机、Y/Z偏移、存档管理（创建副本/覆盖/自动加载/删除，只保存选择内容+自动加载开关）
+  通知频率限制：同一提示60秒内最多显示2次
+  原脚本来源：final_eb2fabb5-ecbb-4de5-a3b0-a2dca29c7bd4.lua
+]]
+
+local v0 = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))();
+local v1 = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))();
+local _ = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))();
+
+local l_v0_Window_0 = v0:CreateWindow({
+    Title = "SUR抽箭汉化脚本", 
+    SubTitle = "v1.0", 
+    TabWidth = 140, 
+    Size = UDim2.fromOffset(490, 390), 
+    Acrylic = true, 
+    Theme = "Dark", 
+    MinimizeKey = Enum.KeyCode.RightControl
+});
+
+local v4 = {
+    DungeonFarm = l_v0_Window_0:AddTab({ Title = "200级地牢副本", Icon = "swords" }), 
+    StandFarm = l_v0_Window_0:AddTab({ Title = "抽替身", Icon = "apple" }), 
+    Settings = l_v0_Window_0:AddTab({ Title = "设置", Icon = "server-cog" }), 
+    SpecialReserve = l_v0_Window_0:AddTab({ Title = "保留特殊替身加属性", Icon = "shield" })
+};
+
+local l_Options_0 = v0.Options;
+local l_LocalPlayer_0 = game:GetService("Players").LocalPlayer;
+local l_RunService_0 = game:GetService("RunService");
+local l_Workspace_0 = game:GetService("Workspace");
+local l_ReplicatedStorage_0 = game:GetService("ReplicatedStorage");
+
+getgenv().BeginFarm = false;
+
+-- ==================== 工具函数 ====================
+
+local function teleportPart(part, targetCFrame)
+    if part and part:IsA("BasePart") then
+        pcall(function()
+            part.CFrame = targetCFrame;
+            part.Velocity = Vector3.new(0, 0, 0);
+        end);
+    end;
+end;
+
+local function getCharacter()
+    local char = l_LocalPlayer_0.Character or l_LocalPlayer_0.CharacterAdded:Wait();
+    local hrp = char:WaitForChild("HumanoidRootPart", 3);
+    local hum = char:WaitForChild("Humanoid", 3);
+    if not hrp or not hum then return nil; end
+    return char;
+end;
+
+local function fireRemote(remote, arg)
+    return pcall(function()
+        if arg ~= nil then
+            remote:FireServer(arg);
+        else
+            remote:FireServer();
+        end;
+    end);
+end;
+
+local notifyLimiter = {};
+local function notify(title, content, duration)
+    local key = title .. content;
+    local now = tick();
+    if not notifyLimiter[key] then
+        notifyLimiter[key] = { count = 0, resetTime = now + 60 };
+    end;
+    if now > notifyLimiter[key].resetTime then
+        notifyLimiter[key] = { count = 0, resetTime = now + 60 };
+    end;
+    if notifyLimiter[key].count >= 2 then return; end;
+    notifyLimiter[key].count = notifyLimiter[key].count + 1;
+    v0:Notify({ Title = title, Content = content, Duration = duration or 5 });
+end;
+
+-- ==================== 200级地牢副本 ====================
+
+local loadCFrame = CFrame.new(28147.680, 34.861, -290.330);
+
+local isDungeonFarming = false;
+local isWaitingRespawn = false;
+local eventConnection = nil;
+
+local Y_OFFSET = -8;
+local Z_OFFSET = 0;
+
+local function clearLivingHumanoids()
+    pcall(function()
+        local living = l_Workspace_0:FindFirstChild("Living");
+        if living then
+            for _, obj in pairs(living:GetChildren()) do
+                if obj:FindFirstChild("Humanoid") then
+                    local hum = obj.Humanoid;
+                    local parentName = hum.Parent and hum.Parent.Name or "";
+                    if parentName ~= l_LocalPlayer_0.Name then
+                        local isPlayer = false;
+                        for _, plr in pairs(game:GetService("Players"):GetPlayers()) do
+                            if plr.Name == parentName then
+                                isPlayer = true;
+                                break;
+                            end;
+                        end;
+                        if not isPlayer then
+                            hum:Destroy();
+                        end;
+                    end;
+                end;
+            end;
+        end;
+    end);
+end;
+
+local function startDungeonLoop()
+    clearLivingHumanoids();
+    
+    local char = getCharacter();
+    if char then
+        teleportPart(char.HumanoidRootPart, loadCFrame);
+    end;
+    task.wait(0.5);
+    
+    if eventConnection then eventConnection:Disconnect(); end;
+    eventConnection = l_RunService_0.Heartbeat:Connect(function()
+        if not isDungeonFarming then return; end;
+        pcall(function()
+            local npcs = l_Workspace_0.Map.NPCs:GetChildren();
+            if npcs[41] and npcs[41]:FindFirstChild("Done") then
+                npcs[41].Done:FireServer();
+            end;
+        end);
+    end);
+    
+    task.wait(1);
+    
+    getgenv().G = true;
+    getgenv().Creator = 'https://discord.gg/B3HqPPzFYr - HalloweenGaster';
+    
+    while getgenv().G and getgenv().Creator == 'https://discord.gg/B3HqPPzFYr - HalloweenGaster' and isDungeonFarming do
+        local currentChar = getCharacter();
+        if not currentChar or not currentChar:FindFirstChild("Humanoid") or currentChar.Humanoid.Health <= 0 then
+            if not isWaitingRespawn then
+                isWaitingRespawn = true;
+                notify("警告", "角色已死亡，等待复活后重新开始...", 5);
+            end;
+            getgenv().G = false;
+            if eventConnection then eventConnection:Disconnect(); end;
+            repeat
+                task.wait(1);
+                currentChar = getCharacter();
+            until currentChar and currentChar:FindFirstChild("Humanoid") and currentChar.Humanoid.Health > 0;
+            
+            isWaitingRespawn = false;
+            notify("提示", "角色已复活，重新开始循环。", 3);
+            startDungeonLoop();
+            return;
+        end;
+        
+        task.wait(0.9);
+        pcall(function()
+            sethiddenproperty(game.Players.LocalPlayer, "SimulationRadius", 112412400000);
+            sethiddenproperty(game.Players.LocalPlayer, "MaxSimulationRadius", 112412400000);
+        end);
+        for _, d in pairs(game.Workspace:GetDescendants()) do
+            if d.ClassName == "Humanoid" and d.Parent and d.Parent.Name ~= l_LocalPlayer_0.Name then
+                local isPlayer = false;
+                for _, plr in pairs(game:GetService("Players"):GetPlayers()) do
+                    if plr.Name == d.Parent.Name then
+                        isPlayer = true;
+                        break;
+                    end;
+                end;
+                if not isPlayer then
+                    d.Health = 0;
+                end;
+            end;
+        end;
+    end;
+end;
+
+v4.DungeonFarm:AddToggle("AutoFarmDungeon", {
+    Title = "自动挂机", 
+    Icon = "play", 
+    Default = false
+});
+
+l_Options_0.AutoFarmDungeon:OnChanged(function()
+    isDungeonFarming = l_Options_0.AutoFarmDungeon.Value;
+    
+    if isDungeonFarming then
+        isWaitingRespawn = false;
+        notify("提示", "200级地牢副本已开始", 3);
+        task.spawn(startDungeonLoop);
+    else
+        getgenv().G = false;
+        isWaitingRespawn = false;
+        if eventConnection then
+            eventConnection:Disconnect();
+            eventConnection = nil;
+        end;
+        local char = getCharacter();
+        if char then char.Humanoid.Sit = false; end;
+        notify("提示", "200级地牢副本已停止", 3);
+    end;
+end);
+
+-- ==================== 抽替身 ====================
+
+local standNameMap = {
+    ["King Crimson"] = "KingCrimson",
+    ["Crazy Diamond"] = "CrazyDiamond",
+    ["Hierophant Green"] = "HG",
+    ["Silver Chariot"] = "SilverChariot",
+    ["The World"] = "TheWorld",
+    ["Dio's The World"] = "DTW",
+    ["Star Platinum"] = "StarPlatinum",
+    ["Killer Queen"] = "KillerQueen",
+    ["Dirty Deeds Done Dirt Cheap"] = "D4C",
+    ["White Snake"] = "WhiteSnake",
+    ["Golden Experience"] = "GE",
+    ["Tusk Act1"] = "TA1",
+    ["The Hand"] = "TheHand",
+    Cream = "Cream",
+    ["Diver Down"] = "DiverDown",
+    ["Jotaro's Star Platinum"] = "JotarosStarPlatinum",
+    ["Magician's Red"] = "MR",
+    ["Sticky Fingers"] = "StickyFingers",
+    ["Premier Macho"] = "PM",
+    ["Putrid Whine"] = "PutridWhine",
+    ["Silver Chariot OVA"] = "SCOVA",
+    ["Star Platinum OVA"] = "StarPlatinumOVA",
+    ["The World OVA"] = "TWOVA",
+    ["Stone Free"] = "StoneFree",
+    ["The World Alternate Universe"] = "TWAU",
+    ["Soft And Wet"] = "SoftAndWet",
+    ["暗物质"] = "IBM",
+    ["sol"] = "SolPlatina",
+    ["solova"] = "SolPlatinaOVA",
+    ["STU"] = "STU",
+    ["TUV"] = "TUVestige"
+};
+
+local standDisplayNames = {};
+for name, _ in pairs(standNameMap) do
+    table.insert(standDisplayNames, name);
+end;
+table.sort(standDisplayNames);
+
+local attributeList = {
+    "None", "Strong", "Tough", "Sloppy", "Powerful", "Manic", "Enrage",
+    "Lethargic", "Godly", "Daemon", "Invincible", "Tragic", "Scourge",
+    "GlassCannon", "Hacker", "Legendary"
+};
+
+local selectedStands = {};
+local selectedAttris = {};
+local selectedItem = "Stand Arrow";
+local selectedCondition = "None";
+local isStandFarming = false;
+
+local specialReserveList = {};
+local isSpecialReserveEnabled = false;
+
+local MarketplaceService = game:GetService("MarketplaceService");
+local LocalPlr = game:GetService("Players").LocalPlayer;
+local RepStorage = game:GetService("ReplicatedStorage");
+
+local function getChar()
+    local char = LocalPlr.Character or LocalPlr.CharacterAdded:Wait();
+    local hrp = char:WaitForChild("HumanoidRootPart", 5);
+    local hum = char:WaitForChild("Humanoid", 5);
+    if not hrp or not hum then return nil; end
+    return char;
+end;
+
+local function useItem(itemName, char)
+    local tool = LocalPlr.Backpack:FindFirstChild(itemName);
+    if char:FindFirstChild(itemName) then
+        char.Humanoid:UnequipTools();
+        task.wait(0.1);
+    end;
+    if not tool then return false; end
+    char.Humanoid:EquipTool(tool);
+    task.wait(0.1);
+    if char:FindFirstChild(itemName) then
+        char[itemName]:Activate();
+        fireRemote(RepStorage.Events.UseItem);
+        local prompt = char[itemName]:FindFirstChildOfClass("ProximityPrompt");
+        if prompt then fireproximityprompt(prompt, 1); end;
+        task.wait(0.5);
+        return true;
+    end;
+    return false;
+end;
+
+local function checkCondition()
+    local currentStand = LocalPlr.Data and LocalPlr.Data.Stand and LocalPlr.Data.Stand.Value or "None";
+    local currentAttri = LocalPlr.Data and LocalPlr.Data.Attri and LocalPlr.Data.Attri.Value or "None";
+    currentAttri = tostring(currentAttri);
+    local hasStand = table.find(selectedStands, currentStand);
+    local hasAttri = table.find(selectedAttris, currentAttri);
+    
+    if selectedCondition == "StandCheck" then return hasStand;
+    elseif selectedCondition == "AttributeCheck" then return hasAttri;
+    elseif selectedCondition == "StandOrAttriCheck" then return hasStand or hasAttri;
+    elseif selectedCondition == "StandAndAttriCheck" then return hasStand and hasAttri;
+    else return false; end;
+end;
+
+local function checkSpecialReserve()
+    if not isSpecialReserveEnabled then return false; end
+    local currentStand = LocalPlr.Data and LocalPlr.Data.Stand and LocalPlr.Data.Stand.Value or "None";
+    local currentAttri = LocalPlr.Data and LocalPlr.Data.Attri and LocalPlr.Data.Attri.Value or "None";
+    currentAttri = tostring(currentAttri);
+    
+    for _, group in ipairs(specialReserveList) do
+        if group.stand and group.stand ~= "" then
+            if currentStand == group.stand then
+                if group.attris and #group.attris > 0 then
+                    for _, attri in ipairs(group.attris) do
+                        if currentAttri == attri then
+                            return true;
+                        end;
+                    end;
+                else
+                    return true;
+                end;
+            end;
+        end;
+    end;
+    return false;
+end;
+
+local function unequipAll()
+    local char = getChar();
+    if char then
+        char.Humanoid:UnequipTools();
+        char.Humanoid.Sit = false;
+    end;
+end;
+
+local function storeCurrentStand()
+    local level = LocalPlr.Data and LocalPlr.Data.Level and LocalPlr.Data.Level.Value or 1;
+    local hasGP1 = pcall(function() return MarketplaceService:UserOwnsGamePassAsync(LocalPlr.UserId, 142794026); end) and true or false;
+    local hasGP2 = pcall(function() return MarketplaceService:UserOwnsGamePassAsync(LocalPlr.UserId, 146346514); end) and true or false;
+    
+    local slots = {1, 2, 4, 3, 5};
+    if hasGP1 then table.insert(slots, 3); end;
+    if level >= 120 then table.insert(slots, 4); end;
+    if hasGP2 then table.insert(slots, 5); end;
+    
+    for _, slot in ipairs(slots) do
+        local slotData = LocalPlr.Data["Slot" .. slot .. "Stand"];
+        if slotData and slotData.Value == "None" then
+            fireRemote(RepStorage.Events.SwitchStand, "Slot" .. slot);
+            local timeout = tick() + 5;
+            while tick() < timeout and LocalPlr.Data and LocalPlr.Data.Stand and LocalPlr.Data.Stand.Value ~= "None" and isStandFarming do
+                task.wait(0.1);
+            end;
+            if LocalPlr.Data and LocalPlr.Data.Stand and LocalPlr.Data.Stand.Value == "None" then
+                notify("提示", "已将替身存入栏位 " .. slot, 3);
+                return true;
+            else break; end;
+        end;
+    end;
+    return false;
+end;
+
+local function doOneRoll()
+    local char = getChar();
+    if not char then return false, "no_character"; end
+    
+    local currentStand = LocalPlr.Data and LocalPlr.Data.Stand and LocalPlr.Data.Stand.Value or "None";
+    
+    if currentStand ~= "None" and checkSpecialReserve() then
+        if storeCurrentStand() then
+            return true, "stored_special";
+        else
+            return false, "no_slots";
+        end;
+    end;
+    
+    if checkCondition() then
+        if storeCurrentStand() then
+            return true, "stored";
+        else
+            return false, "no_slots";
+        end;
+        
+    elseif currentStand == "None" then
+        if not useItem(selectedItem, char) then return false, "no_item"; end
+        local timeout = tick() + 5;
+        while tick() < timeout and LocalPlr.Data and LocalPlr.Data.Stand and LocalPlr.Data.Stand.Value == "None" and isStandFarming do
+            task.wait(0.1);
+        end;
+        return true, "used_item";
+        
+    elseif not useItem("Rokakaka", char) then
+        return false, "no_rokakaka";
+    else
+        local timeout = tick() + 5;
+        while tick() < timeout and LocalPlr.Data and LocalPlr.Data.Stand and LocalPlr.Data.Stand.Value ~= "None" and isStandFarming do
+            task.wait(0.1);
+        end;
+        return true, "used_rokakaka";
+    end;
+end;
+
+-- ==================== 抽替身 UI ====================
+
+v4.StandFarm:AddDropdown("SelectStands", {
+    Title = "替身", Icon = "star", Values = standDisplayNames, Multi = true, Default = {}
+});
+
+l_Options_0.SelectStands:OnChanged(function(val)
+    selectedStands = {};
+    for k, v in pairs(val) do
+        if v then
+            local mapped = standNameMap[k];
+            if mapped then table.insert(selectedStands, mapped); end;
+        end;
+    end;
+end);
+
+v4.StandFarm:AddDropdown("SelectAttributes", {
+    Title = "属性词条", Icon = "award", Values = attributeList, Multi = true, Default = {}
+});
+
+l_Options_0.SelectAttributes:OnChanged(function(val)
+    selectedAttris = {};
+    for k, v in pairs(val) do
+        if v then table.insert(selectedAttris, k); end;
+    end;
+end);
+
+v4.StandFarm:AddDropdown("SelectItem", {
+    Title = "使用的道具", Icon = "tool", Values = {"Stand Arrow", "Charged Arrow", "Kars Mask"}, Default = 1
+});
+
+l_Options_0.SelectItem:OnChanged(function(val)
+    selectedItem = val;
+end);
+
+v4.StandFarm:AddDropdown("SelectCondition", {
+    Title = "判定条件", Icon = "check", 
+    Values = {"None", "StandCheck", "AttributeCheck", "StandOrAttriCheck", "StandAndAttriCheck"}, 
+    Default = 1
+});
+
+l_Options_0.SelectCondition:OnChanged(function(val)
+    selectedCondition = val;
+end);
+
+v4.StandFarm:AddToggle("StartStandFarm", {
+    Title = "开始挂机", Icon = "play", Default = false
+});
+
+l_Options_0.StartStandFarm:OnChanged(function()
+    isStandFarming = l_Options_0.StartStandFarm.Value;
+    
+    if isStandFarming then
+        if selectedCondition == "None" and not isSpecialReserveEnabled then
+            notify("错误", "请先选择判定条件或开启特殊保留。", 5);
+            isStandFarming = false;
+            l_Options_0.StartStandFarm:SetValue(false);
+            return;
+        elseif (selectedCondition == "StandCheck" or selectedCondition == "StandOrAttriCheck" or selectedCondition == "StandAndAttriCheck") and #selectedStands == 0 and not isSpecialReserveEnabled then
+            notify("错误", "请至少选择一个替身或开启特殊保留。", 5);
+            isStandFarming = false;
+            l_Options_0.StartStandFarm:SetValue(false);
+            return;
+        elseif (selectedCondition == "AttributeCheck" or selectedCondition == "StandOrAttriCheck" or selectedCondition == "StandAndAttriCheck") and #selectedAttris == 0 and not isSpecialReserveEnabled then
+            notify("错误", "请至少选择一个属性词条或开启特殊保留。", 5);
+            isStandFarming = false;
+            l_Options_0.StartStandFarm:SetValue(false);
+            return;
+        end;
+        
+        unequipAll();
+        notify("提示", "替身挂机已开始。", 3);
+        
+        task.spawn(function()
+            LocalPlr.CharacterAdded:Connect(function()
+                if isStandFarming then unequipAll(); end;
+            end);
+            
+            while isStandFarming do
+                local success, reason = doOneRoll();
+                if not success then
+                    if reason == "no_character" then
+                        while not LocalPlr.Character and isStandFarming do task.wait(1); end;
+                    elseif reason == "no_item" then
+                        notify("警告", selectedItem .. " 已用完。", 5);
+                        while not LocalPlr.Backpack:FindFirstChild(selectedItem) and isStandFarming do task.wait(1); end;
+                    elseif reason == "no_rokakaka" then
+                        notify("警告", "洛卡卡卡已用完。", 5);
+                        while not LocalPlr.Backpack:FindFirstChild("Rokakaka") and isStandFarming do task.wait(1); end;
+                    elseif reason == "no_slots" then
+                        notify("警告", "没有空替身栏位。", 5);
+                        isStandFarming = false;
+                        l_Options_0.StartStandFarm:SetValue(false);
+                        break;
+                    end;
+                end;
+                task.wait(0.1);
+            end;
+            unequipAll();
+            notify("提示", "替身挂机已停止。", 3);
+        end);
+    else
+        notify("提示", "替身挂机已停止。", 3);
+    end;
+end);
+
+v4.StandFarm:AddButton({
+    Title = "打开仓库", Icon = "archive", 
+    Callback = function()
+        fireRemote(l_Workspace_0.Map.NPCs.admpn.Done);
+    end
+});
+
+-- ==================== 设置 ====================
+
+v4.Settings:AddToggle("AntiAFK", {
+    Title = "防挂机检测", Icon = "clock", Default = false
+});
+
+local isAntiAFK = false;
+local antiAFKConnection = nil;
+
+l_Options_0.AntiAFK:OnChanged(function()
+    isAntiAFK = l_Options_0.AntiAFK.Value;
+    
+    if isAntiAFK then
+        local CoreGui = game:GetService("StarterGui");
+        local vu = game:GetService("VirtualUser");
+        local lp = game:GetService("Players").LocalPlayer;
+        
+        CoreGui:SetCore("SendNotification", {
+            Title = "SUR抽箭汉化脚本",
+            Text = "反挂机已开启",
+            Duration = 5,
+        });
+        print("反挂机开启");
+        
+        antiAFKConnection = lp.Idled:Connect(function()
+            vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame);
+            task.wait(1);
+            vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame);
+        end);
+    else
+        if antiAFKConnection then
+            antiAFKConnection:Disconnect();
+            antiAFKConnection = nil;
+        end;
+        print("反挂机已关闭");
+    end;
+end);
+
+v4.Settings:AddSlider("YOffset", {
+    Title = "Y 偏移", Description = "调整上下距离", Default = -5, Min = -10, Max = 20, Rounding = 1,
+    Callback = function(val) Y_OFFSET = val; end
+});
+
+v4.Settings:AddSlider("ZOffset", {
+    Title = "Z 偏移", Description = "调整前后距离", Default = 0, Min = -10, Max = 10, Rounding = 1,
+    Callback = function(val) Z_OFFSET = val; end
+});
+
+-- ==================== 设置 - 存档管理 ====================
+
+local saveDataList = {};
+local saveFileNames = {};
+local autoLoadSaveEnabled = false;
+
+local function refreshSaveList()
+    saveDataList = {};
+    saveFileNames = {};
+    for i = 1, 50 do
+        local fileName = "SUR_Save_" .. i .. ".json";
+        pcall(function()
+            local content = readfile(fileName);
+            if content and content ~= "" then
+                local data = game:GetService("HttpService"):JSONDecode(content);
+                saveDataList[fileName] = data;
+                table.insert(saveFileNames, "副本 " .. i);
+            end;
+        end);
+    end;
+    if #saveFileNames == 0 then
+        saveFileNames = { "无存档" };
+    end;
+    if l_Options_0.SaveSelector then
+        l_Options_0.SaveSelector:SetValues(saveFileNames);
+        l_Options_0.SaveSelector:SetValue(saveFileNames[1] or "无存档");
+    end;
+end;
+
+local function getCurrentSettings()
+    local data = {
+        selectedItem = selectedItem,
+        selectedCondition = selectedCondition,
+        selectedStands = {},
+        selectedAttris = {},
+        specialReserve = {},
+        autoLoadSave = autoLoadSaveEnabled
+    };
+    for _, stand in ipairs(selectedStands) do
+        table.insert(data.selectedStands, stand);
+    end;
+    for _, attri in ipairs(selectedAttris) do
+        table.insert(data.selectedAttris, attri);
+    end;
+    for i = 1, 6 do
+        local group = specialReserveList[i] or { stand = "", attris = {} };
+        data.specialReserve[i] = {
+            stand = group.stand or "",
+            attris = {}
+        };
+        if group.attris then
+            for _, attri in ipairs(group.attris) do
+                table.insert(data.specialReserve[i].attris, attri);
+            end;
+        end;
+    end;
+    return data;
+end;
+
+local function applySettings(data)
+    if data.selectedItem then
+        selectedItem = data.selectedItem;
+        l_Options_0.SelectItem:SetValue(data.selectedItem);
+    end;
+    if data.selectedCondition then
+        selectedCondition = data.selectedCondition;
+        l_Options_0.SelectCondition:SetValue(data.selectedCondition);
+    end;
+    if data.selectedStands then
+        selectedStands = {};
+        local standMap = {};
+        for _, stand in ipairs(data.selectedStands) do
+            table.insert(selectedStands, stand);
+            for displayName, code in pairs(standNameMap) do
+                if code == stand then
+                    standMap[displayName] = true;
+                end;
+            end;
+        end;
+        l_Options_0.SelectStands:SetValue(standMap);
+    end;
+    if data.selectedAttris then
+        selectedAttris = {};
+        local attriMap = {};
+        for _, attri in ipairs(data.selectedAttris) do
+            table.insert(selectedAttris, attri);
+            attriMap[attri] = true;
+        end;
+        l_Options_0.SelectAttributes:SetValue(attriMap);
+    end;
+    if data.specialReserve then
+        for i = 1, 6 do
+            local group = data.specialReserve[i];
+            if group then
+                specialReserveList[i].stand = group.stand or "";
+                specialReserveList[i].attris = group.attris or {};
+                if group.stand and group.stand ~= "" then
+                    for displayName, code in pairs(standNameMap) do
+                        if code == group.stand then
+                            l_Options_0["SpecialStand_" .. i]:SetValue(displayName);
+                        end;
+                    end;
+                else
+                    l_Options_0["SpecialStand_" .. i]:SetValue(nil);
+                end;
+                local attriMap = {};
+                for _, attri in ipairs(group.attris or {}) do
+                    attriMap[attri] = true;
+                end;
+                l_Options_0["SpecialAttri_" .. i]:SetValue(attriMap);
+            end;
+        end;
+    end;
+    if data.autoLoadSave ~= nil then
+        autoLoadSaveEnabled = data.autoLoadSave;
+        l_Options_0.AutoLoadSave:SetValue(data.autoLoadSave);
+    end;
+    notify("提示", "设置已覆盖。", 3);
+end;
+
+v4.Settings:AddButton({
+    Title = "创建副本",
+    Icon = "save",
+    Callback = function()
+        local nextIndex = 1;
+        for i = 1, 50 do
+            local fileName = "SUR_Save_" .. i .. ".json";
+            local exists = false;
+            pcall(function()
+                local content = readfile(fileName);
+                if content and content ~= "" then exists = true; end;
+            end);
+            if not exists then
+                nextIndex = i;
+                break;
+            end;
+            nextIndex = i + 1;
+        end;
+        if nextIndex > 50 then
+            notify("错误", "存档数量已达上限50个。", 5);
+            return;
+        end;
+        
+        local fileName = "SUR_Save_" .. nextIndex .. ".json";
+        local data = getCurrentSettings();
+        pcall(function()
+            writefile(fileName, game:GetService("HttpService"):JSONEncode(data));
+        end);
+        
+        notify("提示", "已保存为 副本 " .. nextIndex, 3);
+        refreshSaveList();
+    end
+});
+
+v4.Settings:AddDropdown("SaveSelector", {
+    Title = "选择存档",
+    Icon = "folder",
+    Values = { "无存档" },
+    Multi = false,
+    Default = "无存档"
+});
+
+v4.Settings:AddButton({
+    Title = "覆盖当前设置",
+    Icon = "upload",
+    Callback = function()
+        local selected = l_Options_0.SaveSelector.Value;
+        if selected == "无存档" then
+            notify("错误", "请先选择一个存档。", 5);
+            return;
+        end;
+        local index = string.match(selected, "副本 (%d+)");
+        if not index then return; end;
+        local fileName = "SUR_Save_" .. index .. ".json";
+        local data = saveDataList[fileName];
+        if data then
+            applySettings(data);
+        else
+            notify("错误", "存档数据读取失败。", 5);
+        end;
+    end
+});
+
+v4.Settings:AddToggle("AutoLoadSave", {
+    Title = "自动加载上次存档",
+    Icon = "rotate-cw",
+    Default = false
+});
+
+l_Options_0.AutoLoadSave:OnChanged(function()
+    autoLoadSaveEnabled = l_Options_0.AutoLoadSave.Value;
+end);
+
+v4.Settings:AddButton({
+    Title = "删除当前存档",
+    Icon = "trash",
+    Callback = function()
+        local selected = l_Options_0.SaveSelector.Value;
+        if selected == "无存档" then
+            notify("错误", "请先选择一个存档。", 5);
+            return;
+        end;
+        local index = string.match(selected, "副本 (%d+)");
+        if not index then return; end;
+        local fileName = "SUR_Save_" .. index .. ".json";
+        pcall(function()
+            delfile(fileName);
+        end);
+        notify("提示", "已删除 " .. selected, 3);
+        refreshSaveList();
+    end
+});
+
+refreshSaveList();
+
+task.spawn(function()
+    for _, name in ipairs(saveFileNames) do
+        if name ~= "无存档" then
+            local idx = tonumber(string.match(name, "副本 (%d+)"));
+            if idx then
+                local fileName = "SUR_Save_" .. idx .. ".json";
+                local data = saveDataList[fileName];
+                if data and data.autoLoadSave == true then
+                    applySettings(data);
+                    notify("提示", "检测到自动加载存档： " .. name .. "，已自动恢复。", 3);
+                    break;
+                end;
+            end;
+        end;
+    end;
+end);
+
+-- ==================== 保留特殊替身加属性（6组） ====================
+
+v4.SpecialReserve:AddToggle("EnableSpecialReserve", {
+    Title = "特殊替身以及属性保留",
+    Icon = "shield-check",
+    Default = false
+});
+
+l_Options_0.EnableSpecialReserve:OnChanged(function()
+    isSpecialReserveEnabled = l_Options_0.EnableSpecialReserve.Value;
+end);
+
+for i = 1, 6 do
+    specialReserveList[i] = { stand = "", attris = {} };
+end;
+
+task.spawn(function()
+    for i = 1, 6 do
+        local groupIndex = i;
+        
+        v4.SpecialReserve:AddDropdown("SpecialStand_" .. i, {
+            Title = "选择保留替身 #" .. i,
+            Icon = "star",
+            Values = standDisplayNames,
+            Multi = false,
+            Default = nil
+        });
+        
+        l_Options_0["SpecialStand_" .. i]:OnChanged(function(val)
+            local mapped = standNameMap[val];
+            specialReserveList[groupIndex].stand = mapped or "";
+        end);
+        
+        v4.SpecialReserve:AddDropdown("SpecialAttri_" .. i, {
+            Title = "选择保留属性 #" .. i,
+            Icon = "award",
+            Values = attributeList,
+            Multi = true,
+            Default = {}
+        });
+        
+        l_Options_0["SpecialAttri_" .. i]:OnChanged(function(val)
+            specialReserveList[groupIndex].attris = {};
+            for k, v in pairs(val) do
+                if v then table.insert(specialReserveList[groupIndex].attris, k); end;
+            end;
+        end);
+        
+        task.wait(0.05);
+    end;
+end);
+
+-- ==================== 初始化 ====================
+
+local floatingGui = Instance.new("ScreenGui");
+floatingGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui");
+floatingGui.Name = "FloatingButtonGui";
+floatingGui.ResetOnSpawn = false;
+
+local floatingBtn = Instance.new("ImageButton");
+floatingBtn.Size = UDim2.new(0, 40, 0, 40);
+floatingBtn.Position = UDim2.new(0.5, -25, 0.5, -25);
+floatingBtn.BackgroundTransparency = 1;
+floatingBtn.Image = "rbxassetid://12514663645";
+floatingBtn.Parent = floatingGui;
+
+local corner = Instance.new("UICorner");
+corner.CornerRadius = UDim.new(1, 0);
+corner.Parent = floatingBtn;
+
+local isDragging = false;
+local dragInput = nil;
+local dragStart = nil;
+local startPos = nil;
+
+floatingBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDragging = true;
+        dragStart = input.Position;
+        startPos = floatingBtn.Position;
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                isDragging = false;
+            end;
+        end);
+    end;
+end);
+
+floatingBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input;
+    end;
+end);
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if isDragging and input == dragInput then        local delta = input.Position - dragStart;
+        floatingBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y);
+    end;
+end);
+
+local isVisible = true;
+floatingBtn.MouseButton1Click:Connect(function()
+    isVisible = not isVisible;
+    l_v0_Window_0:Minimize(not isVisible);
+    game:GetService("TweenService"):Create(floatingBtn, TweenInfo.new(0.3), {
+        ImageTransparency = isVisible and 0 or 0.5
+    }):Play();
+end);
+
+l_v0_Window_0:SelectTab(1);
+v1:LoadAutoloadConfig();
+notify("提示", "脚本已加载，200级地牢、抽替身、设置、特殊保留功能就绪。", 8);
